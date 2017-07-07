@@ -7,7 +7,9 @@ import pytz
 from netCDF4 import Dataset
 
 def load(basefile, metadata):
-
+    """
+    Main load file
+    """
     doublefill = 1e35
     shortfill = -32768
 
@@ -22,7 +24,6 @@ def load(basefile, metadata):
     # Nortek lists the distance to the center of the first bin as the blanking
     # distance plus one cell size
     metadata['center_first_bin'] = metadata['blanking_distance'] + metadata['bin_size'] # in m
-
 
     print "Loading ASCII files"
 
@@ -67,11 +68,27 @@ def load(basefile, metadata):
     write_aqd_cdf_data(cdf_filename, RAW, metadata)
     print 'Variables written'
 
+    add_min_max(cdf_filename)
+
     return RAW
 
 
-def write_aqd_cdf_data(cdf_filename, RAW, metadata):
+def add_min_max(cdf_filename):
+    rg = Dataset(cdf_filename, 'r+')
+    exclude = rg.dimensions.keys()
+    exclude.extend(('time2', 'TransMatrix'))
+    for var in rg.variables:
+        if var not in exclude:
+            rg[var].minimum = rg[var][:].min()
+            rg[var].maximum = rg[var][:].max()
+    print "Assigned min and max values"
+    rg.close()
 
+def write_aqd_cdf_data(cdf_filename, RAW, metadata):
+    """
+    Write data to NetCDF file that has already been set up using
+    define_aqd_cdf_file()
+    """
     rg = Dataset(cdf_filename, 'r+')
 
     rg['lat'][:] = metadata['latitude']
@@ -102,6 +119,9 @@ def write_aqd_cdf_data(cdf_filename, RAW, metadata):
     rg.close()
 
 def define_aqd_cdf_file(cdf_filename, RAW, metadata):
+    """
+    Define dimensions and variables in NetCDF file
+    """
     double_fill_val = 1e35;
 
     # try:
@@ -243,9 +263,15 @@ def define_aqd_cdf_file(cdf_filename, RAW, metadata):
     #     rg.close()
 
 def hms2h(h,m,s):
+    """
+    Convert hour, minute, second to fractional hour
+    """
     return h + m/60 + s/60/60
 
 def julian(t):
+    """
+    Compute Julian date, relying heavily on jdcal package
+    """
     y = t.year
     m = t.month
     d = t.day
@@ -253,7 +279,9 @@ def julian(t):
     return sum(jdcal.gcal2jd(y,m,d)) + h/24 + 0.5
 
 def compute_time(RAW):
-    # RAW['datetime'] = [dt.datetime(, tzinfo=pytz.utc)
+    """
+    Compute Julian date and then time and time2 for use in NetCDF file
+    """
     RAW['jd'] = np.array([julian(t) for t in RAW['datetime']])
 
     RAW['time'] = np.floor(RAW['jd'])
@@ -263,6 +291,9 @@ def compute_time(RAW):
     return RAW
 
 def load_sen(RAW, basefile):
+    """
+    Load data from .sen file
+    """
     senfile = basefile + '.sen'
     SEN = np.genfromtxt(senfile);
 
@@ -280,6 +311,9 @@ def load_sen(RAW, basefile):
     return RAW
 
 def load_amp_vel(RAW, basefile):
+    """
+    Load amplitude and velocity data from the .aN and .vN files
+    """
     for n in [1, 2, 3]:
         afile = basefile + '.a' + str(n)
         RAW['AMP' + str(n)] = np.genfromtxt(afile)
@@ -291,8 +325,10 @@ def load_amp_vel(RAW, basefile):
     return RAW
 
 def read_aqd_hdr(basefile):
-    # formerly readAQDprfHeader
-    # %function to get instrument metadata about AWAC deployment from header file
+    """
+    Get instrument metadata from .hdr file
+    Was formerly readAQDprfHeader.m
+    """
     #
     # % TODO read and save all of the instrument settings in the .hdr file
     # % replacing strncmp with strfind, strncmp need the exact length of string,
