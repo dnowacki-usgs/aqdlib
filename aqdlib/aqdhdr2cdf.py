@@ -60,7 +60,7 @@ def load(basefile, metadata):
 
     # configure file
     cdf_filename = '/Volumes/Backstaff/field/gb_proc/1076a/1076a1aqd/' + metadata['filename'] + '-raw.cdf' # TODO: fix the path
-    print 'Writing Aquadopp data to %s\n' % cdf_filename
+    print 'Opening %s' % cdf_filename
 
     define_aqd_cdf_file(cdf_filename, RAW, metadata)
     print 'Variables created'
@@ -69,6 +69,8 @@ def load(basefile, metadata):
     print 'Variables written'
 
     add_min_max(cdf_filename)
+
+    print 'Finished writing data to %s' % cdf_filename
 
     return RAW
 
