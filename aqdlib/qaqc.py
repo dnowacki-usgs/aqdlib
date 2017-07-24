@@ -48,3 +48,46 @@ def plot_atmcomp(aqddatetime, aqdpress, aqdpress_ac):
     plt.plot(aqddatetime, aqdpress)
     plt.plot(aqddatetime, aqdpress_ac)
     plt.show()
+
+def coord_transform(vel1, vel2, vel3, heading, pitch, roll, T, cs):
+    N, M = np.shape(vel1)
+
+    u = np.zeros((N,M))
+    v = np.zeros((N,M))
+    w = np.zeros((N,M))
+
+    if cs == 'ENU':
+        print 'Data already in earth coordinates; applying magnetic correction'
+        u =  vel1 * math.cos(magvar) + vel2 * math.sin(magvar);
+        v = -vel1 * math.sin(magvar) + vel2 * math.cos(magvar);
+        w = vel3;
+    elif cs == 'XYZ':
+        # TODO: add XYZ
+        print "xyz"
+    elif cs == 'BEAM':
+        print 'Data are in BEAM coordinates; transforming to earth coordinates...'
+
+        for i in range(N):
+            hh = np.pi * (heading[i] - 90) / 180;
+            pp = np.pi * pitch[i] / 180;
+            rr = np.pi * roll[i] / 180;
+
+            H = np.array([[ np.cos(hh), np.sin(hh), 0],
+                          [-np.sin(hh), np.cos(hh), 0],
+                          [ 0,          0,          1]])
+
+            # make tilt matrix
+            P = np.array([[np.cos(pp), -np.sin(pp) * np.sin(rr), -np.cos(rr) * np.sin(pp)],
+                          [0,           np.cos(rr),              -np.sin(rr)],
+                          [np.sin(pp),  np.sin(rr) * np.cos(pp),  np.cos(pp) * np.cos(rr)]])
+
+            # resulting transformation matrix
+            R = np.dot(np.dot(H, P), T)
+
+            for j in range(M):
+                vel = np.dot(R, np.array([vel1[i,j], vel2[i,j], vel3[i,j]]).T)
+                u[i,j] = vel[0]
+                v[i,j] = vel[1]
+                w[i,j] = vel[2]
+
+    return (u, v, w)
