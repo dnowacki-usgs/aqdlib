@@ -129,6 +129,10 @@ def define_aqd_cdf_file(cdf_filename, RAW, metadata):
     # try:
     rg = Dataset(cdf_filename, 'w', format='NETCDF4', clobber=True)
 
+    # write out EPIC metadata
+    write_metadata(rg, metadata)
+    write_metadata(rg, RAW['instmeta'])
+
     N, M = np.shape(RAW['V1'])
 
     # Time is the record dimension
@@ -263,6 +267,13 @@ def define_aqd_cdf_file(cdf_filename, RAW, metadata):
     # except:
     #     print 'exception raised'
     #     rg.close()
+
+def write_metadata(rg, metadata):
+    """
+    Write out all metadata to CDF file
+    """
+    for k in metadata.keys():
+        setattr(rg, k, metadata[k])
 
 def hms2h(h,m,s):
     """
