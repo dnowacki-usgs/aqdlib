@@ -43,13 +43,13 @@ def load(basefile, metadata):
     print 'bin_count = %f\n' % metadata['bin_count']
     RAW['bindist'] = np.arange(metadata['center_first_bin'], (metadata['center_first_bin']+((metadata['bin_count']-1)*metadata['bin_size'])), metadata['bin_size'])
 
-    if metadata['orientation'] is 'UP':
+    if metadata['orientation'] == 'UP':
         print 'User instructed that instrument was pointing UP'
         # depth, or distance below surface, is a positive number below the
         # surface, negative above the surface, for CMG purposes and consistency with ADCP
         RAW['Depths'] = (metadata['WATER_DEPTH'] - metadata['transducer_offset_from_bottom']) - RAW['bindist']
         Depth_NOTE = 'user reports uplooking bin depths = water_depth - transducer offset from bottom - bindist'
-    elif metadata['orientation'] is 'DOWN':
+    elif metadata['orientation'] == 'DOWN':
         print 'User instructed that instrument was pointing DOWN'
         RAW['Depths'] = (metadata['WATER_DEPTH'] - metadata['transducer_offset_from_bottom']) + RAW['bindist']
         Depth_NOTE = 'user reports downlooking bin depths = water_depth - transducer_offset_from_bottom + bindist'
@@ -211,15 +211,15 @@ def define_aqd_cdf_file(cdf_filename, RAW, metadata):
     VEL3id.Type = 'scalar'
     VEL3id.transducer_offset_from_bottom = metadata['transducer_offset_from_bottom']
 
-    if RAW['instmeta']['AQDCoordinateSystem'] is 'ENU':
+    if RAW['instmeta']['AQDCoordinateSystem'] == 'ENU':
         VEL1id.long_name = 'Eastward current velocity'
         VEL2id.long_name = 'Northward current velocity'
         VEL3id.long_name = 'Vertical current velocity'
-    elif RAW['instmeta']['AQDCoordinateSystem'] is 'XYZ':
+    elif RAW['instmeta']['AQDCoordinateSystem'] == 'XYZ':
         VEL1id.long_name = 'Current velocity in X Direction'
         VEL2id.long_name = 'Current velocity in Y Direction'
         VEL3id.long_name = 'Current velocity in Z Direction'
-    elif RAW['instmeta']['AQDCoordinateSystem'] is 'BEAM':
+    elif RAW['instmeta']['AQDCoordinateSystem'] == 'BEAM':
         VEL1id.long_name = 'Beam 1 current velocity'
         VEL2id.long_name = 'Beam 2 current velocity'
         VEL3id.long_name = 'Beam 3 current velocity'
