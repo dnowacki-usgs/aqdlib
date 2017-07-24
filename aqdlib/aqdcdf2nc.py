@@ -22,9 +22,15 @@ def cdf_to_nc(cdf_filename, metadata, p1_ac=False):
     return VEL
 
 def load_cdf_amp_vel(rg, VEL):
+    # TODO: need to clip start and end properly
+
     vel1 = rg['VEL1'][:]
     vel2 = rg['VEL2'][:]
     vel3 = rg['VEL3'][:]
+
+    amp1 = rg['AMP1'][:]
+    amp2 = rg['AMP2'][:]
+    amp3 = rg['AMP3'][:]
 
     # initialize arrays
     VEL['U'] = np.zeros(np.shape(vel1))
@@ -42,8 +48,10 @@ def load_cdf_amp_vel(rg, VEL):
     VEL['U'], VEL['V'], VEL['W'] = qaqc.coord_transform(vel1, vel2, vel3, heading, pitch, roll, T, rg.AQDCoordinateSystem)
 
     VEL['pressure'] = rg['Pressure'][:]
+    VEL['temp'] = rg['Temperature'][:]
     VEL['time'] = rg['time'][:]
     VEL['time2'] = rg['time2'][:]
+    VEL['AGC'] = (amp1 + amp2 + amp3) / 3
 
     return VEL
 
@@ -156,6 +164,33 @@ def define_aqd_nc_file(nc_filename, VEL, metadata):
     Pressid.initial_instrument_height = metadata['initial_instrument_height']
     # netcdf.putAtt(ncid,Pressid,'nominal_instrument_depth',metadata.nominal_instrument_depth); #FIXME
 
+    Tempid = rg.createVariable('Tx_1211', 'f', ('lat', 'lon', 'time',), zlib=True)
+    Tempid.units = 'C'
+    Tempid.epic_code = 1211
+    Tempid.setncattr('name', 'Tx')
+    Tempid.long_name = 'Instrument Transducer Temperature'
+    Tempid.generic_name = 'temp'
+    Tempid.minimum = doublefill
+    Tempid.maximum = doublefill
+    # netcdf.putAtt(ncid,Pressid,'serial_number',metadata.cdfmeta.AQDSerial_Number); #FIXME
+    Tempid.initial_instrument_height = metadata['initial_instrument_height']
+    # netcdf.putAtt(ncid,Pressid,'nominal_instrument_depth',metadata.nominal_instrument_depth); #FIXME
+
+    AGCid = rg.createVariable('AGC_1202', 'f', ('depth', 'lat', 'lon', 'time',), zlib=True)
+    AGCid.units = 'counts'
+    AGCid.epic_code = 1202
+    AGCid.setncattr('name', 'AGC')
+    AGCid.long_name = 'Average Echo Intensity (AGC)'
+    AGCid.generic_name = 'AGC'
+    # AGCid.sensor_type = INST_TYPE # FIXME
+    AGCid.minimum = 0
+    AGCid.maximum = 0 # TODO: why are min/max different (0 vs doublefill for others?)
+    # netcdf.putAtt(ncid,AGCid,'sensor_type',metadata.cdfmeta.INST_TYPE); #FIXME
+    # netcdf.putAtt(ncid,Pressid,'serial_number',metadata.cdfmeta.AQDSerial_Number); #FIXME
+    AGCid.initial_instrument_height = metadata['initial_instrument_height']
+    AGCid.height_depth_units = 'm'
+    # netcdf.putAtt(ncid,Pressid,'nominal_instrument_depth',metadata.nominal_instrument_depth); #FIXME
+
     rg.close()
 
 def write_aqd_nc_file(nc_filename, VEL, metadata):
@@ -165,8 +200,8 @@ def write_aqd_nc_file(nc_filename, VEL, metadata):
 
     rg['lat'][:] = metadata['latitude']
     rg['lon'][:] = metadata['longitude']
-    rg['time'][:] = VEL['time']
-    rg['time2'][:] = VEL['time2']
+    # rg['time'][:] = VEL['time']
+    # rg['time2'][:] = VEL['time2']
 
     # rg['bindist'] = VEL['bindist']
     rg['u_1205'][:] = np.reshape(VEL['U'].T, (M, 1, 1, N))
@@ -174,6 +209,8 @@ def write_aqd_nc_file(nc_filename, VEL, metadata):
     rg['w_1204'][:] = np.reshape(VEL['W'].T, (M, 1, 1, N))
 
     rg['P_1'][:] = VEL['pressure'][np.newaxis, np.newaxis, :]
+    rg['Tx_1211'][:] = VEL['temp'][np.newaxis, np.newaxis, :]
+    rg['AGC_1202'][:] = np.reshape(VEL['AGC'].T, (M, 1, 1, N))
 
     rg.close()
 
