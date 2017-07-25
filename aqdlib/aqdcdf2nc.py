@@ -56,7 +56,7 @@ def load_cdf_amp_vel(rg, VEL):
     return VEL
 
 def define_aqd_nc_file(nc_filename, VEL, metadata):
-    doublefill = 1e35
+    double_fill_val = 1e35
 
     N, M = np.shape(VEL['U'])
 
@@ -88,6 +88,7 @@ def define_aqd_nc_file(nc_filename, VEL, metadata):
     lonid.FORTRAN_format = 'F10.4' # TODO: Why is there a FORTRAN_format on here but not the others?????
     lonid.units = 'degree_east'
     lonid.epic_code = 502
+    # TODO: why is the setup of these variables different from the setup in the CDF routines?
 
     depthid = rg.createVariable('depth', 'f', ('depth',), zlib=True)
     depthid.units = 'm'
@@ -158,8 +159,8 @@ def define_aqd_nc_file(nc_filename, VEL, metadata):
     Pressid.setncattr('name', 'P')
     Pressid.long_name = 'PRESSURE (DB)          ' # TODO: why so many extra spaces?
     Pressid.generic_name = 'depth'
-    Pressid.minimum = doublefill
-    Pressid.maximum = doublefill
+    Pressid.minimum = double_fill_val
+    Pressid.maximum = double_fill_val
     # netcdf.putAtt(ncid,Pressid,'serial_number',metadata.cdfmeta.AQDSerial_Number); #FIXME
     Pressid.initial_instrument_height = metadata['initial_instrument_height']
     # netcdf.putAtt(ncid,Pressid,'nominal_instrument_depth',metadata.nominal_instrument_depth); #FIXME
@@ -170,8 +171,8 @@ def define_aqd_nc_file(nc_filename, VEL, metadata):
     Tempid.setncattr('name', 'Tx')
     Tempid.long_name = 'Instrument Transducer Temperature'
     Tempid.generic_name = 'temp'
-    Tempid.minimum = doublefill
-    Tempid.maximum = doublefill
+    Tempid.minimum = double_fill_val
+    Tempid.maximum = double_fill_val
     # netcdf.putAtt(ncid,Pressid,'serial_number',metadata.cdfmeta.AQDSerial_Number); #FIXME
     Tempid.initial_instrument_height = metadata['initial_instrument_height']
     # netcdf.putAtt(ncid,Pressid,'nominal_instrument_depth',metadata.nominal_instrument_depth); #FIXME
@@ -184,7 +185,7 @@ def define_aqd_nc_file(nc_filename, VEL, metadata):
     AGCid.generic_name = 'AGC'
     # AGCid.sensor_type = INST_TYPE # FIXME
     AGCid.minimum = 0
-    AGCid.maximum = 0 # TODO: why are min/max different (0 vs doublefill for others?)
+    AGCid.maximum = 0 # TODO: why are min/max different (0 vs double_fill_val for others?)
     # netcdf.putAtt(ncid,AGCid,'sensor_type',metadata.cdfmeta.INST_TYPE); #FIXME
     # netcdf.putAtt(ncid,Pressid,'serial_number',metadata.cdfmeta.AQDSerial_Number); #FIXME
     AGCid.initial_instrument_height = metadata['initial_instrument_height']
