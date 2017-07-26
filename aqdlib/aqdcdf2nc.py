@@ -1,4 +1,4 @@
-from __future__ import division
+from __future__ import division, print_function
 from netCDF4 import Dataset
 import numpy as np
 import qaqc
@@ -215,4 +215,4 @@ def write_aqd_nc_file(nc_filename, VEL, metadata):
 
     rg.close()
 
-    print 'Done writing NetCDF file'
+    print('Done writing NetCDF file')

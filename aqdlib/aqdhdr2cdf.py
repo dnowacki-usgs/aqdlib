@@ -1,4 +1,4 @@
-from __future__ import division
+from __future__ import division, print_function
 import os
 import numpy as np
 import datetime as dt
@@ -16,7 +16,7 @@ def load(basefile, metadata):
     # get instrument metadata from the HDR file
     instmeta = read_aqd_hdr(basefile)
 
-    print "Loading ASCII files"
+    print("Loading ASCII files")
 
     # basePath = os.path.dirname(basefile)
     # baseName = os.path.basename(basefile)
@@ -43,27 +43,27 @@ def load(basefile, metadata):
     RAW['instmeta'] = instmeta
 
     # Put in fill values
-    print "about to insert fill values"
+    print("about to insert fill values")
     RAW = insert_fill_values(RAW, doublefill)
 
     # configure file
     cdf_filename = '/Volumes/Backstaff/field/gb_proc/1076a/1076a1aqd/' + metadata['filename'] + '-raw.cdf' # TODO: fix the path
-    print 'Opening %s' % cdf_filename
+    print('Opening %s' % cdf_filename)
 
     define_aqd_cdf_file(cdf_filename, RAW, metadata)
-    print 'Variables created'
+    print('Variables created')
 
     write_aqd_cdf_data(cdf_filename, RAW, metadata)
-    print 'Variables written'
+    print('Variables written')
 
     add_min_max(cdf_filename)
 
-    print 'Finished writing data to %s' % cdf_filename
+    print('Finished writing data to %s' % cdf_filename)
 
     return RAW
 
 def insert_fill_values(RAW, doublefill):
-    print "Inserting fill values"
+    print("Inserting fill values")
     for k in RAW:
         if k not in ['instmeta', 'time', 'time2', 'datetime'] and np.max(np.shape(RAW[k])) == np.max(np.shape(RAW['jd'])):
             nanind = np.where(np.isnan(RAW[k]))
@@ -72,21 +72,21 @@ def insert_fill_values(RAW, doublefill):
     return RAW
 
 def check_orientation(RAW, metadata):
-    print metadata['orientation']
-    print 'Center_first_bin = %f\n' % metadata['center_first_bin']
-    print 'bin_size = %f\n' % metadata['bin_size']
-    print 'bin_count = %f\n' % metadata['bin_count']
+    print(metadata['orientation'])
+    print('Center_first_bin = %f\n' % metadata['center_first_bin'])
+    print('bin_size = %f\n' % metadata['bin_size'])
+    print('bin_count = %f\n' % metadata['bin_count'])
     # TODO: these values are already in the HDR file...
     RAW['bindist'] = np.arange(metadata['center_first_bin'], (metadata['center_first_bin']+((metadata['bin_count']-1)*metadata['bin_size'])), metadata['bin_size'])
 
     if metadata['orientation'] == 'UP':
-        print 'User instructed that instrument was pointing UP'
+        print('User instructed that instrument was pointing UP')
         # depth, or distance below surface, is a positive number below the
         # surface, negative above the surface, for CMG purposes and consistency with ADCP
         RAW['Depths'] = (metadata['WATER_DEPTH'] - metadata['transducer_offset_from_bottom']) - RAW['bindist']
         Depth_NOTE = 'user reports uplooking bin depths = water_depth - transducer offset from bottom - bindist' # TODO: this is never used
     elif metadata['orientation'] == 'DOWN':
-        print 'User instructed that instrument was pointing DOWN'
+        print('User instructed that instrument was pointing DOWN')
         RAW['Depths'] = (metadata['WATER_DEPTH'] - metadata['transducer_offset_from_bottom']) + RAW['bindist']
         Depth_NOTE = 'user reports downlooking bin depths = water_depth - transducer_offset_from_bottom + bindist' # TODO: this is never used
 
@@ -101,7 +101,7 @@ def check_metadata(metadata, instmeta):
         metadata['initial_instrument_height'] = 0
 
     for k in instmeta:
-        print k
+        print(k)
     metadata['serial_number'] = instmeta['AQDSerial_Number']
 
     # update metadata from Aquadopp header to CMG standard so that various
@@ -144,7 +144,7 @@ def add_min_max(cdf_filename):
         if var not in exclude:
             rg[var].minimum = rg[var][:].min()
             rg[var].maximum = rg[var][:].max()
-    print "Assigned min and max values"
+    print("Assigned min and max values")
     rg.close()
 
 def write_aqd_cdf_data(cdf_filename, RAW, metadata):

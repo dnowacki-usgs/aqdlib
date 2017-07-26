@@ -1,4 +1,4 @@
-from __future__ import division
+from __future__ import division, print_function
 import matplotlib.pyplot as plt
 import numpy as np
 from dateutil import parser
@@ -57,15 +57,15 @@ def coord_transform(vel1, vel2, vel3, heading, pitch, roll, T, cs):
     w = np.zeros((N,M))
 
     if cs == 'ENU':
-        print 'Data already in earth coordinates; applying magnetic correction'
+        print('Data already in earth coordinates; applying magnetic correction')
         u =  vel1 * math.cos(magvar) + vel2 * math.sin(magvar);
         v = -vel1 * math.sin(magvar) + vel2 * math.cos(magvar);
         w = vel3;
     elif cs == 'XYZ':
         # TODO: add XYZ
-        print "xyz"
+        print("xyz")
     elif cs == 'BEAM':
-        print 'Data are in BEAM coordinates; transforming to earth coordinates...'
+        print('Data are in BEAM coordinates; transforming to earth coordinates...')
 
         for i in range(N):
             hh = np.pi * (heading[i] - 90) / 180;
