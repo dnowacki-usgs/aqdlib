@@ -3,6 +3,10 @@ from netCDF4 import Dataset
 import numpy as np
 import qaqc
 from aqdlib import DOUBLE_FILL
+import dateutil
+import pytz
+import jdcal
+import datetime as dt
 
 def cdf_to_nc(cdf_filename, metadata, p1_ac=False):
 
@@ -10,7 +14,7 @@ def cdf_to_nc(cdf_filename, metadata, p1_ac=False):
 
     VEL = {}
 
-    VEL = load_cdf_amp_vel(cdf_filename, VEL)
+    VEL = load_cdf_amp_vel(cdf_filename, VEL, metadata)
 
     define_aqd_nc_file(nc_filename, VEL, metadata)
 
@@ -18,39 +22,69 @@ def cdf_to_nc(cdf_filename, metadata, p1_ac=False):
 
     return VEL
 
-def load_cdf_amp_vel(cdf_filename, VEL):
+def day2hms(d):
+    frachours = d * 24
+    h = np.int(np.floor(frachours))
+    fracmins = (frachours - h) * 60
+    m = np.int(np.floor(fracmins))
+    fracsecs = (fracmins - m) * 60
+    s = np.int(fracsecs)
+
+    return h, m, s
+
+def load_cdf_amp_vel(cdf_filename, VEL, metadata):
     try:
         rg = Dataset(cdf_filename, 'r')
 
         # TODO: need to clip start and end properly
 
-        vel1 = rg['VEL1'][:]
-        vel2 = rg['VEL2'][:]
-        vel3 = rg['VEL3'][:]
+        # clip either by ensemble indices or by the deployment and recovery date specified in metadata
+        if 'good_ens' in metadata:
+            S = good_ens[0]
+            E = good_ens[1]
+        else:
+            time = rg['time'][:]
+            time2 = rg['time2'][:]
 
-        amp1 = rg['AMP1'][:]
-        amp2 = rg['AMP2'][:]
-        amp3 = rg['AMP3'][:]
+            times = []
+            for t, t2 in zip(time, time2):
+                year, mon, day, frac = jdcal.jd2gcal(t - 0.5, t2/86400000)
+                hour, minute, second = day2hms(frac)
+                times.append(dt.datetime(year, mon, day, hour, minute, second, tzinfo=pytz.utc))
+            times = np.array(times)
+
+            S = np.argwhere(times >= pytz.utc.localize(dateutil.parser.parse(rg.Deployment_date)))[0]
+            E = np.argwhere(times <= pytz.utc.localize(dateutil.parser.parse(rg.Recovery_date)))[-1]
+
+        print('Indices of starting and ending bursts: S:', S, 'E:', E)
+        vel1 = rg['VEL1'][:, S:E]
+        vel2 = rg['VEL2'][:, S:E]
+        vel3 = rg['VEL3'][:, S:E]
+
+        amp1 = rg['AMP1'][:, S:E]
+        amp2 = rg['AMP2'][:, S:E]
+        amp3 = rg['AMP3'][:, S:E]
+
+        heading = rg['Heading'][S:E]
+        pitch = rg['Pitch'][S:E]
+        roll = rg['Roll'][S:E]
+
+        T = rg['TransMatrix'][:]
+
+        VEL['pressure'] = rg['Pressure'][S:E]
+        VEL['temp'] = rg['Temperature'][S:E]
+        VEL['time'] = rg['time'][S:E]
+        VEL['time2'] = rg['time2'][S:E]
 
         # initialize arrays
         VEL['U'] = np.zeros(np.shape(vel1))
         VEL['V'] = np.zeros(np.shape(vel2))
         VEL['W'] = np.zeros(np.shape(vel3))
 
-        heading = rg['Heading'][:]
-        pitch = rg['Pitch'][:]
-        roll = rg['Roll'][:]
-
-        T = rg['TransMatrix'][:]
-
-        N, M = np.shape(vel1)
+        # N, M = np.shape(vel1)
 
         VEL['U'], VEL['V'], VEL['W'] = qaqc.coord_transform(vel1, vel2, vel3, heading, pitch, roll, T, rg.AQDCoordinateSystem)
 
-        VEL['pressure'] = rg['Pressure'][:]
-        VEL['temp'] = rg['Temperature'][:]
-        VEL['time'] = rg['time'][:]
-        VEL['time2'] = rg['time2'][:]
         VEL['AGC'] = (amp1 + amp2 + amp3) / 3
 
         return VEL
