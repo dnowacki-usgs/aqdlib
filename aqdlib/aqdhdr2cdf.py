@@ -5,13 +5,12 @@ import datetime as dt
 import jdcal
 import pytz
 from netCDF4 import Dataset
+from aqdlib import DOUBLE_FILL
 
-def load(basefile, metadata):
+def prf_to_cdf(basefile, metadata):
     """
     Main load file
     """
-    doublefill = 1e35
-    shortfill = -32768
 
     # get instrument metadata from the HDR file
     instmeta = read_aqd_hdr(basefile)
@@ -44,7 +43,7 @@ def load(basefile, metadata):
 
     # Put in fill values
     print("about to insert fill values")
-    RAW = insert_fill_values(RAW, doublefill)
+    RAW = insert_fill_values(RAW)
 
     # configure file
     cdf_filename = '/Volumes/Backstaff/field/gb_proc/1076a/1076a1aqd/' + metadata['filename'] + '-raw.cdf' # TODO: fix the path
@@ -62,12 +61,12 @@ def load(basefile, metadata):
 
     return RAW
 
-def insert_fill_values(RAW, doublefill):
+def insert_fill_values(RAW):
     print("Inserting fill values")
     for k in RAW:
         if k not in ['instmeta', 'time', 'time2', 'datetime'] and np.max(np.shape(RAW[k])) == np.max(np.shape(RAW['jd'])):
             nanind = np.where(np.isnan(RAW[k]))
-            RAW[k][nanind] = doublefill
+            RAW[k][nanind] = DOUBLE_FILL
 
     return RAW
 
@@ -136,231 +135,235 @@ def add_min_max(cdf_filename):
     """
     Add minimum and maximum values to variables in CDF file
     """
+    try:
+        rg = Dataset(cdf_filename, 'r+')
+        exclude = rg.dimensions.keys()
+        exclude.extend(('time2', 'TransMatrix'))
+        for var in rg.variables:
+            if var not in exclude:
+                rg[var].minimum = rg[var][:].min()
+                rg[var].maximum = rg[var][:].max()
+        print("Assigned min and max values")
 
-    rg = Dataset(cdf_filename, 'r+')
-    exclude = rg.dimensions.keys()
-    exclude.extend(('time2', 'TransMatrix'))
-    for var in rg.variables:
-        if var not in exclude:
-            rg[var].minimum = rg[var][:].min()
-            rg[var].maximum = rg[var][:].max()
-    print("Assigned min and max values")
-    rg.close()
+    finally:
+        rg.close()
 
 def write_aqd_cdf_data(cdf_filename, RAW, metadata):
     """
     Write data to NetCDF file that has already been set up using
     define_aqd_cdf_file()
     """
-    rg = Dataset(cdf_filename, 'r+')
+    try:
+        rg = Dataset(cdf_filename, 'r+')
 
-    rg['lat'][:] = metadata['latitude']
-    rg['lon'][:] = metadata['longitude']
-    rg['time'][:] = RAW['time']
-    rg['time2'][:] = RAW['time2']
-    rg['depth'][:] = RAW['Depths']
-    rg['bindist'][:] = RAW['bindist']
+        rg['lat'][:] = metadata['latitude']
+        rg['lon'][:] = metadata['longitude']
+        rg['time'][:] = RAW['time']
+        rg['time2'][:] = RAW['time2']
+        rg['depth'][:] = RAW['Depths']
+        rg['bindist'][:] = RAW['bindist']
 
-    rg['VEL1'][:] = RAW['V1'].T
-    rg['VEL2'][:] = RAW['V2'].T
-    rg['VEL3'][:] = RAW['V3'].T
+        rg['VEL1'][:] = RAW['V1'].T
+        rg['VEL2'][:] = RAW['V2'].T
+        rg['VEL3'][:] = RAW['V3'].T
 
-    rg['AMP1'][:] = RAW['AMP1'].T
-    rg['AMP2'][:] = RAW['AMP2'].T
-    rg['AMP3'][:] = RAW['AMP3'].T
+        rg['AMP1'][:] = RAW['AMP1'].T
+        rg['AMP2'][:] = RAW['AMP2'].T
+        rg['AMP3'][:] = RAW['AMP3'].T
 
-    rg['Temperature'][:] = RAW['temperature']
-    rg['Pressure'][:] = RAW['pressure']
-    rg['Battery'][:] = RAW['battery']
+        rg['Temperature'][:] = RAW['temperature']
+        rg['Pressure'][:] = RAW['pressure']
+        rg['Battery'][:] = RAW['battery']
 
-    rg['Pitch'][:] = RAW['pitch']
-    rg['Roll'][:] = RAW['roll']
-    rg['Heading'][:] = RAW['heading']
+        rg['Pitch'][:] = RAW['pitch']
+        rg['Roll'][:] = RAW['roll']
+        rg['Heading'][:] = RAW['heading']
 
-    rg['TransMatrix'][:] = RAW['instmeta']['AQDTransMatrix']
+        rg['TransMatrix'][:] = RAW['instmeta']['AQDTransMatrix']
 
-    if 'AnaInp1' in RAW:
-        rg['AnalogInput1'][:] = RAW['AnaInp1']
+        if 'AnaInp1' in RAW:
+            rg['AnalogInput1'][:] = RAW['AnaInp1']
 
-    if 'AnaInp2' in RAW:
-        rg['AnalogInput2'][:] = RAW['AnaInp2']
+        if 'AnaInp2' in RAW:
+            rg['AnalogInput2'][:] = RAW['AnaInp2']
 
-    rg.close()
+    finally:
+        rg.close()
 
 def define_aqd_cdf_file(cdf_filename, RAW, metadata):
     """
     Define dimensions and variables in NetCDF file
     """
-    double_fill_val = 1e35;
 
-    # try:
-    rg = Dataset(cdf_filename, 'w', format='NETCDF4', clobber=True)
+    try:
+        rg = Dataset(cdf_filename, 'w', format='NETCDF4', clobber=True)
 
-    # write out EPIC metadata
-    write_metadata(rg, metadata)
-    write_metadata(rg, RAW['instmeta'])
+        # write out EPIC metadata
+        write_metadata(rg, metadata)
+        write_metadata(rg, RAW['instmeta'])
 
-    N, M = np.shape(RAW['V1'])
+        N, M = np.shape(RAW['V1'])
 
-    # Time is the record dimension
-    time = rg.createDimension('time', 0)
-    depth = rg.createDimension('depth', M)
-    lat = rg.createDimension('lat', 1)
-    lon = rg.createDimension('lon', 1)
-    Tmatrix = rg.createDimension('Tmatrix', 3)
+        # Time is the record dimension
+        time = rg.createDimension('time', 0)
+        depth = rg.createDimension('depth', M)
+        lat = rg.createDimension('lat', 1)
+        lon = rg.createDimension('lon', 1)
+        Tmatrix = rg.createDimension('Tmatrix', 3)
 
-    timeid = rg.createVariable('time', 'i', ('time',)) # 'i' == NC_INT
-    timeid.FORTRAN_format = 'F10.2'
-    timeid.units = 'True Julian Day'
-    timeid.type = 'UNEVEN'
-    timeid.epic_code = 624
+        timeid = rg.createVariable('time', 'i', ('time',)) # 'i' == NC_INT
+        timeid.FORTRAN_format = 'F10.2'
+        timeid.units = 'True Julian Day'
+        timeid.type = 'UNEVEN'
+        timeid.epic_code = 624
 
-    time2id = rg.createVariable('time2', 'i', ('time',)) # 'i' == NC_INT
-    time2id.FORTRAN_format = 'F10.2'
-    time2id.units = 'msec since 0:00 GMT'
-    time2id.type ='UNEVEN'
-    time2id.epic_code = 624
+        time2id = rg.createVariable('time2', 'i', ('time',)) # 'i' == NC_INT
+        time2id.FORTRAN_format = 'F10.2'
+        time2id.units = 'msec since 0:00 GMT'
+        time2id.type ='UNEVEN'
+        time2id.epic_code = 624
 
-    latid = rg.createVariable('lat', 'f', ('lat',))
-    latid.FORTRAN_format = 'F10.4'
-    latid.units = 'degree_north'
-    latid.type = 'EVEN'
-    latid.epic_code = 500
-    latid.minimum = double_fill_val
-    latid.maximum = double_fill_val
+        latid = rg.createVariable('lat', 'f', ('lat',))
+        latid.FORTRAN_format = 'F10.4'
+        latid.units = 'degree_north'
+        latid.type = 'EVEN'
+        latid.epic_code = 500
+        latid.minimum = DOUBLE_FILL
+        latid.maximum = DOUBLE_FILL
 
-    lonid = rg.createVariable('lon', 'f', ('lon',))
-    lonid.FORTRAN_format = 'F10.4'
-    lonid.units = 'degree_east'
-    lonid.type = 'EVEN'
-    lonid.epic_code = 502
-    lonid.minimum = double_fill_val
-    lonid.maximum = double_fill_val
+        lonid = rg.createVariable('lon', 'f', ('lon',))
+        lonid.FORTRAN_format = 'F10.4'
+        lonid.units = 'degree_east'
+        lonid.type = 'EVEN'
+        lonid.epic_code = 502
+        lonid.minimum = DOUBLE_FILL
+        lonid.maximum = DOUBLE_FILL
 
-    depthid = rg.createVariable('depth', 'f', ('depth',))
-    depthid.units = 'm'
-    depthid.long_name = 'mean water depth'
-    depthid.bin_size = metadata['bin_size']
-    depthid.center_first_bin = metadata['center_first_bin']
-    depthid.bin_count = metadata['bin_count']
-    depthid.transducer_offset_from_bottom = metadata['transducer_offset_from_bottom']
+        depthid = rg.createVariable('depth', 'f', ('depth',))
+        depthid.units = 'm'
+        depthid.long_name = 'mean water depth'
+        depthid.bin_size = metadata['bin_size']
+        depthid.center_first_bin = metadata['center_first_bin']
+        depthid.bin_count = metadata['bin_count']
+        depthid.transducer_offset_from_bottom = metadata['transducer_offset_from_bottom']
 
-    bindistid = rg.createVariable('bindist', 'f', ('depth',))
-    bindistid.units = 'm'
-    bindistid.long_name = 'distance from transducer head'
-    bindistid.bin_size = metadata['bin_size']
-    bindistid.center_first_bin = metadata['center_first_bin']
-    bindistid.bin_count = metadata['bin_count']
-    bindistid.transducer_offset_from_bottom = metadata['transducer_offset_from_bottom']
+        bindistid = rg.createVariable('bindist', 'f', ('depth',))
+        bindistid.units = 'm'
+        bindistid.long_name = 'distance from transducer head'
+        bindistid.bin_size = metadata['bin_size']
+        bindistid.center_first_bin = metadata['center_first_bin']
+        bindistid.bin_count = metadata['bin_count']
+        bindistid.transducer_offset_from_bottom = metadata['transducer_offset_from_bottom']
 
-    Tempid = rg.createVariable('Temperature', 'f', ('time',))
-    Tempid.units = 'C'
-    Tempid.long_name = 'TEMPERATURE (C)'
-    Tempid.generic_name = 'temp'
+        Tempid = rg.createVariable('Temperature', 'f', ('time',))
+        Tempid.units = 'C'
+        Tempid.long_name = 'TEMPERATURE (C)'
+        Tempid.generic_name = 'temp'
 
-    Pressid = rg.createVariable('Pressure', 'f', ('time',))
-    Pressid.units = 'dbar'
-    Pressid.long_name = 'Pressure (dbar)'
-    Pressid.generic_name = 'press'
+        Pressid = rg.createVariable('Pressure', 'f', ('time',))
+        Pressid.units = 'dbar'
+        Pressid.long_name = 'Pressure (dbar)'
+        Pressid.generic_name = 'press'
 
-    VEL1id = rg.createVariable('VEL1', 'f', ('depth', 'time',))
-    VEL1id.units = 'cm/s'
-    VEL1id.Type = 'scalar'
-    VEL1id.transducer_offset_from_bottom = metadata['transducer_offset_from_bottom']
+        VEL1id = rg.createVariable('VEL1', 'f', ('depth', 'time',))
+        VEL1id.units = 'cm/s'
+        VEL1id.Type = 'scalar'
+        VEL1id.transducer_offset_from_bottom = metadata['transducer_offset_from_bottom']
 
-    VEL2id = rg.createVariable('VEL2', 'f', ('depth', 'time',))
-    VEL2id.units = 'cm/s'
-    VEL2id.Type = 'scalar'
-    VEL2id.transducer_offset_from_bottom = metadata['transducer_offset_from_bottom']
+        VEL2id = rg.createVariable('VEL2', 'f', ('depth', 'time',))
+        VEL2id.units = 'cm/s'
+        VEL2id.Type = 'scalar'
+        VEL2id.transducer_offset_from_bottom = metadata['transducer_offset_from_bottom']
 
-    VEL3id = rg.createVariable('VEL3', 'f', ('depth', 'time',))
-    VEL3id.units = 'cm/s'
-    VEL3id.Type = 'scalar'
-    VEL3id.transducer_offset_from_bottom = metadata['transducer_offset_from_bottom']
+        VEL3id = rg.createVariable('VEL3', 'f', ('depth', 'time',))
+        VEL3id.units = 'cm/s'
+        VEL3id.Type = 'scalar'
+        VEL3id.transducer_offset_from_bottom = metadata['transducer_offset_from_bottom']
 
-    if RAW['instmeta']['AQDCoordinateSystem'] == 'ENU':
-        VEL1id.long_name = 'Eastward current velocity'
-        VEL2id.long_name = 'Northward current velocity'
-        VEL3id.long_name = 'Vertical current velocity'
-    elif RAW['instmeta']['AQDCoordinateSystem'] == 'XYZ':
-        VEL1id.long_name = 'Current velocity in X Direction'
-        VEL2id.long_name = 'Current velocity in Y Direction'
-        VEL3id.long_name = 'Current velocity in Z Direction'
-    elif RAW['instmeta']['AQDCoordinateSystem'] == 'BEAM':
-        VEL1id.long_name = 'Beam 1 current velocity'
-        VEL2id.long_name = 'Beam 2 current velocity'
-        VEL3id.long_name = 'Beam 3 current velocity'
+        if RAW['instmeta']['AQDCoordinateSystem'] == 'ENU':
+            VEL1id.long_name = 'Eastward current velocity'
+            VEL2id.long_name = 'Northward current velocity'
+            VEL3id.long_name = 'Vertical current velocity'
+        elif RAW['instmeta']['AQDCoordinateSystem'] == 'XYZ':
+            VEL1id.long_name = 'Current velocity in X Direction'
+            VEL2id.long_name = 'Current velocity in Y Direction'
+            VEL3id.long_name = 'Current velocity in Z Direction'
+        elif RAW['instmeta']['AQDCoordinateSystem'] == 'BEAM':
+            VEL1id.long_name = 'Beam 1 current velocity'
+            VEL2id.long_name = 'Beam 2 current velocity'
+            VEL3id.long_name = 'Beam 3 current velocity'
 
-    AMP1id = rg.createVariable('AMP1', 'f', ('depth', 'time',))
-    AMP1id.long_name = 'Beam 1 Echo Amplitude'
-    AMP1id.units = 'counts'
-    AMP1id.Type = 'scalar'
-    AMP1id.transducer_offset_from_bottom = metadata['transducer_offset_from_bottom']
+        AMP1id = rg.createVariable('AMP1', 'f', ('depth', 'time',))
+        AMP1id.long_name = 'Beam 1 Echo Amplitude'
+        AMP1id.units = 'counts'
+        AMP1id.Type = 'scalar'
+        AMP1id.transducer_offset_from_bottom = metadata['transducer_offset_from_bottom']
 
-    AMP2id = rg.createVariable('AMP2', 'f', ('depth', 'time',))
-    AMP2id.long_name = 'Beam 2 Echo Amplitude'
-    AMP2id.units = 'counts'
-    AMP2id.Type = 'scalar'
-    AMP2id.transducer_offset_from_bottom = metadata['transducer_offset_from_bottom']
+        AMP2id = rg.createVariable('AMP2', 'f', ('depth', 'time',))
+        AMP2id.long_name = 'Beam 2 Echo Amplitude'
+        AMP2id.units = 'counts'
+        AMP2id.Type = 'scalar'
+        AMP2id.transducer_offset_from_bottom = metadata['transducer_offset_from_bottom']
 
-    AMP3id = rg.createVariable('AMP3', 'f', ('depth', 'time',))
-    AMP3id.long_name = 'Beam 3 Echo Amplitude'
-    AMP3id.units = 'counts'
-    AMP3id.Type = 'scalar'
-    AMP3id.transducer_offset_from_bottom = metadata['transducer_offset_from_bottom']
+        AMP3id = rg.createVariable('AMP3', 'f', ('depth', 'time',))
+        AMP3id.long_name = 'Beam 3 Echo Amplitude'
+        AMP3id.units = 'counts'
+        AMP3id.Type = 'scalar'
+        AMP3id.transducer_offset_from_bottom = metadata['transducer_offset_from_bottom']
 
-    Battid = rg.createVariable('Battery', 'f', ('time',))
-    Battid.units = 'Volts'
-    Battid.long_name = 'Battery Voltage'
+        Battid = rg.createVariable('Battery', 'f', ('time',))
+        Battid.units = 'Volts'
+        Battid.long_name = 'Battery Voltage'
 
-    Pitchid = rg.createVariable('Pitch', 'f', ('time',))
-    Pitchid.units = 'degrees'
-    Pitchid.long_name = 'Instrument Pitch'
+        Pitchid = rg.createVariable('Pitch', 'f', ('time',))
+        Pitchid.units = 'degrees'
+        Pitchid.long_name = 'Instrument Pitch'
 
-    Rollid  = rg.createVariable('Roll', 'f', ('time',))
-    Rollid.units = 'degrees'
-    Rollid.long_name = 'Instrument Roll'
+        Rollid  = rg.createVariable('Roll', 'f', ('time',))
+        Rollid.units = 'degrees'
+        Rollid.long_name = 'Instrument Roll'
 
-    Headid  = rg.createVariable('Heading', 'f', ('time',))
-    Headid.units = 'degrees'
-    Headid.long_name = 'Instrument Heading'
-    Headid.datum = 'magnetic north'
+        Headid  = rg.createVariable('Heading', 'f', ('time',))
+        Headid.units = 'degrees'
+        Headid.long_name = 'Instrument Heading'
+        Headid.datum = 'magnetic north'
 
-    Tmatid = rg.createVariable('TransMatrix', 'f', ('Tmatrix', 'Tmatrix',))
-    Tmatid.long_name = 'Transformation Matrix for this Aquadopp'
+        Tmatid = rg.createVariable('TransMatrix', 'f', ('Tmatrix', 'Tmatrix',))
+        Tmatid.long_name = 'Transformation Matrix for this Aquadopp'
 
-    for n in ['1', '2']:
-        if 'AnalogInput' + n in metadata:
-            Anaid = rg.createVariable('AnalogInput' + n, 'f', ('time',))
-            Anaid.units = 'Volts'
-            Anaid.sensor_type = metadata['AnalogInput1']['sensor_type']
-            Anaid.sensor_manufacturer = metadata['AnalogInput1']['sensor_manufacturer']
-            Anaid.sensor_model = metadata['AnalogInput1']['sensor_model']
-            Anaid.serial_number = metadata['AnalogInput1']['serial_number']
+        for n in ['1', '2']:
+            if 'AnalogInput' + n in metadata:
+                Anaid = rg.createVariable('AnalogInput' + n, 'f', ('time',))
+                Anaid.units = 'Volts'
+                Anaid.sensor_type = metadata['AnalogInput1']['sensor_type']
+                Anaid.sensor_manufacturer = metadata['AnalogInput1']['sensor_manufacturer']
+                Anaid.sensor_model = metadata['AnalogInput1']['sensor_model']
+                Anaid.serial_number = metadata['AnalogInput1']['serial_number']
 
-            if 'initial_sensor_height' in metadata['AnalogInput' + n]:
-                # TODO
-                # metadata.AnalogInput1.nominal_sensor_depth = metadata.WATER_DEPTH - metadata.AnalogInput1.initial_sensor_height;
-                # netcdf.putAtt(ncid,Ana1id,'initial_sensor_height',metadata.AnalogInput1.initial_sensor_height);
-                # netcdf.putAtt(ncid,Ana1id,'nominal_sensor_depth',metadata.AnalogInput1.nominal_sensor_depth);
-                continue
-            elif 'nominal_sensor_depth' in metadata['AnalogInput' + n]: # TODO: should be another if not elif??
-                # netcdf.putAtt(ncid,Ana1id,'nominal_sensor_depth',metadata.AnalogInput1.nominal_sensor_depth);
-                # metadata.AnalogInput1.initial_sensor_height = metadata.WATER_DEPTH - metadata.AnalogInput1.nominal_sensor_depth;
-                # netcdf.putAtt(ncid,Ana1id,'initial_sensor_height',metadata.AnalogInput1.initial_sensor_height);
-                continue
+                if 'initial_sensor_height' in metadata['AnalogInput' + n]:
+                    # TODO
+                    # metadata.AnalogInput1.nominal_sensor_depth = metadata.WATER_DEPTH - metadata.AnalogInput1.initial_sensor_height;
+                    # netcdf.putAtt(ncid,Ana1id,'initial_sensor_height',metadata.AnalogInput1.initial_sensor_height);
+                    # netcdf.putAtt(ncid,Ana1id,'nominal_sensor_depth',metadata.AnalogInput1.nominal_sensor_depth);
+                    continue
+                elif 'nominal_sensor_depth' in metadata['AnalogInput' + n]: # TODO: should be another if not elif??
+                    # netcdf.putAtt(ncid,Ana1id,'nominal_sensor_depth',metadata.AnalogInput1.nominal_sensor_depth);
+                    # metadata.AnalogInput1.initial_sensor_height = metadata.WATER_DEPTH - metadata.AnalogInput1.nominal_sensor_depth;
+                    # netcdf.putAtt(ncid,Ana1id,'initial_sensor_height',metadata.AnalogInput1.initial_sensor_height);
+                    continue
 
-        # if isfield(metadata.AnalogInput1,'range'),
-        #         netcdf.putAtt(ncid,Ana1id,'range',metadata.AnalogInput1.range);
-        # end
-        # if isfield(metadata.AnalogInput1.cals,'NTUcoef'),
-        #         netcdf.putAtt(ncid,Ana1id,'NTUcoef',metadata.AnalogInput1.cals.NTUcoef);
-        # end
-        # if isfield(metadata.AnalogInput1.cals,'SEDcoef'),
-        #         netcdf.putAtt(ncid,Ana1id,'SEDcoef',metadata.AnalogInput1.cals.SEDcoef);
-        # end
+            # if isfield(metadata.AnalogInput1,'range'),
+            #         netcdf.putAtt(ncid,Ana1id,'range',metadata.AnalogInput1.range);
+            # end
+            # if isfield(metadata.AnalogInput1.cals,'NTUcoef'),
+            #         netcdf.putAtt(ncid,Ana1id,'NTUcoef',metadata.AnalogInput1.cals.NTUcoef);
+            # end
+            # if isfield(metadata.AnalogInput1.cals,'SEDcoef'),
+            #         netcdf.putAtt(ncid,Ana1id,'SEDcoef',metadata.AnalogInput1.cals.SEDcoef);
+            # end
 
-    rg.close()
+    finally:
+        rg.close()
 
 def write_metadata(rg, metadata):
     """
