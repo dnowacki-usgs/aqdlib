@@ -81,6 +81,8 @@ def load_cdf_amp_vel(cdf_filename, VEL, metadata):
 
         VEL['AGC'] = (amp1 + amp2 + amp3) / 3
 
+        VEL = qaqc.trim_vel(VEL, metadata)
+
         return VEL
 
     finally:
