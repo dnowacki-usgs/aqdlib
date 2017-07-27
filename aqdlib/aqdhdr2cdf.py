@@ -203,6 +203,7 @@ def define_aqd_cdf_file(cdf_filename, RAW, metadata):
         write_metadata(rg, RAW['instmeta'])
 
         N, M = np.shape(RAW['V1'])
+        print('N:', N, 'M:', M, 'in define_aqd_cdf_file')
 
         # Time is the record dimension
         time = rg.createDimension('time', 0)

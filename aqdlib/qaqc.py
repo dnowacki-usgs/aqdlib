@@ -97,6 +97,29 @@ def coord_transform(vel1, vel2, vel3, heading, pitch, roll, T, cs):
 
     return u, v, w
 
+def set_orientation(VEL, T, metadata):
+    # TODO: this code seems too complicated. also should we really be modifying the trans matrix?
+    # TODO: deal with atmos pressure
+
+    N, M = np.shape(VEL['U'])
+
+    Wdepth = np.nanmean(VEL['pressure']) + metadata['transducer_offset_from_bottom']
+
+    blank2 = metadata['blanking_distance'] + metadata['transducer_offset_from_bottom']
+    binn = metadata['bin_size']
+    blank3 = metadata['transducer_offset_from_bottom'] - metadata['blanking_distance']
+
+    if metadata['orientation'] == 'UP':
+        print('User instructed that instrument was pointing UP')
+        VEL['depths'] = np.arange(Wdepth - binn * (M - 1) + blank2 + binn, Wdepth - (blank2 + binn), binn)
+    elif metadata['orientation'] == 'DOWN':
+        print('User instructed that instrument was pointing DOWN')
+        T[1,:] = -T[1,:]
+        T[2,:] = -T[2,:]
+        VEL['depths'] = np.arange(Wdepth - blank3 + binn, Wdepth - blank3 + binn * M, binn)
+
+    return VEL, T
+
 def magvar_correct(VEL, metadata):
 
     if 'magnetic_variation_at_site' in metadata:
@@ -126,10 +149,51 @@ def magvar_correct(VEL, metadata):
     return VEL
 
 def trim_vel(VEL, metadata):
+    N, M = np.shape(VEL['U'])
+
+    # TODO: need to account for press_ac
+    # if exist('press_ac','var')
+    # WL = press_ac + INFO.Gatts.transducer_offset_from_bottom;
+# else
+    # WL = press + INFO.Gatts.transducer_offset_from_bottom;
+# end
+
+    WL = VEL['pressure'] + metadata['transducer_offset_from_bottom']
+
     if 'trim_method' in metadata:
+        blank = metadata['blanking_distance'] + metadata['transducer_offset_from_bottom'] # TODO: check this logic
+        binn = metadata['bin_size']
         if metadata['trim_method'].lower() == 'water level' or metadata['trim_method'].lower() == 'water level sl':
             print('User instructed to trim data at the surface using pressure data')
-            
+            if metadata['trim_method'].lower() == 'water level':
+                print('Trimming using water level')
+                dist2 = np.arange(blank + binn/2, (binn * (M-1)) + blank + binn/2, binn) # TODO: This seems kludgey, can we just read from hdr instead?
+            elif metadata['trim_method'].lower() == 'water level sl':
+                print('Trimming using water level and sidelobes')
+                dist2 = np.arange(blank + binn, (binn * (M-1)) + blank + binn, binn) # TODO: This seems kludgey, can we just read from hdr instead?
+
+            # need to tile distances and water levels and then compare them
+            d2 = np.tile(dist2, (np.shape(WL)[0], 1))
+            WL2 = np.tile(WL, (np.shape(d2)[1], 1)).T
+            goods = d2 < WL2
+            bads = np.logical_not(goods)
+
+            VEL['U'][bads] = np.nan
+            VEL['V'][bads] = np.nan
+            VEL['W'][bads] = np.nan
+            VEL['AGC'][bads] = np.nan
+
+            # find first bin that is all bad values
+            lastbin = np.argmin(np.all(bads, axis=0) == False)
+
+            VEL['U'] = VEL['U'][:,0:lastbin]
+            VEL['V'] = VEL['V'][:,0:lastbin]
+            VEL['W'] = VEL['W'][:,0:lastbin]
+            VEL['AGC'] = VEL['AGC'][:,0:lastbin]
+            VEL['depths'] = VEL['depths'][0:lastbin]
+            VEL['bindist'] = VEL['bindist'][0:lastbin]
+
+            # TODO: need to add histcomment
 
     return VEL
 

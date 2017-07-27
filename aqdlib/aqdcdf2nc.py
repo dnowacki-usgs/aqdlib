@@ -51,17 +51,20 @@ def load_cdf_amp_vel(cdf_filename, VEL, metadata):
         print('Indices of starting and ending bursts: S:', S, 'E:', E)
 
         # load data from CDF file, specifying start/end bursts
-        vel1 = rg['VEL1'][:, S:E]
-        vel2 = rg['VEL2'][:, S:E]
-        vel3 = rg['VEL3'][:, S:E]
+        # also transpose data so dims are TIME x DEPTH
+        vel1 = rg['VEL1'][:, S:E].T
+        vel2 = rg['VEL2'][:, S:E].T
+        vel3 = rg['VEL3'][:, S:E].T
 
-        amp1 = rg['AMP1'][:, S:E]
-        amp2 = rg['AMP2'][:, S:E]
-        amp3 = rg['AMP3'][:, S:E]
+        amp1 = rg['AMP1'][:, S:E].T
+        amp2 = rg['AMP2'][:, S:E].T
+        amp3 = rg['AMP3'][:, S:E].T
 
         heading = rg['Heading'][S:E]
         pitch = rg['Pitch'][S:E]
         roll = rg['Roll'][S:E]
+
+        VEL['bindist'] = rg['bindist'][:]
 
         T = rg['TransMatrix'][:]
 
@@ -75,7 +78,8 @@ def load_cdf_amp_vel(cdf_filename, VEL, metadata):
         VEL['V'] = np.zeros(np.shape(vel2))
         VEL['W'] = np.zeros(np.shape(vel3))
 
-        # N, M = np.shape(vel1)
+
+        VEL, T = qaqc.set_orientation(VEL, T, metadata)
 
         VEL['U'], VEL['V'], VEL['W'] = qaqc.coord_transform(vel1, vel2, vel3, heading, pitch, roll, T, rg.AQDCoordinateSystem)
 
@@ -97,6 +101,7 @@ def load_cdf_amp_vel(cdf_filename, VEL, metadata):
 def define_aqd_nc_file(nc_filename, VEL, metadata):
     try:
         N, M = np.shape(VEL['U'])
+        print('N:', N, 'M:', M, 'in define_aqd_nc_file')
 
         rg = Dataset('/Volumes/Backstaff/field/gb_proc/1076a/1076a1aqd/' + nc_filename, 'w', format='NETCDF4', clobber=True)
 
@@ -235,6 +240,7 @@ def write_aqd_nc_file(nc_filename, VEL, metadata):
 
     try:
         N, M = np.shape(VEL['U'])
+        print('N:', N, 'M:', M, 'in write_aqd_nc_file')
         rg = Dataset('/Volumes/Backstaff/field/gb_proc/1076a/1076a1aqd/' + nc_filename, 'r+')
 
         rg['lat'][:] = metadata['latitude']
@@ -242,7 +248,7 @@ def write_aqd_nc_file(nc_filename, VEL, metadata):
         rg['time'][:] = VEL['time']
         rg['time2'][:] = VEL['time2']
 
-        # rg['bindist'] = VEL['bindist']
+        rg['bindist'][:] = VEL['bindist']
         rg['u_1205'][:] = np.reshape(VEL['U'].T, (M, 1, 1, N))
         rg['v_1206'][:] = np.reshape(VEL['V'].T, (M, 1, 1, N))
         rg['w_1204'][:] = np.reshape(VEL['W'].T, (M, 1, 1, N))
