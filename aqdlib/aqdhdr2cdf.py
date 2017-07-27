@@ -2,10 +2,10 @@ from __future__ import division, print_function
 import os
 import numpy as np
 import datetime as dt
-import jdcal
 import pytz
 from netCDF4 import Dataset
 from aqdlib import DOUBLE_FILL
+import qaqc
 
 def prf_to_cdf(basefile, metadata):
     """
@@ -372,27 +372,11 @@ def write_metadata(rg, metadata):
     for k in metadata.keys():
         setattr(rg, k, metadata[k])
 
-def hms2h(h,m,s):
-    """
-    Convert hour, minute, second to fractional hour
-    """
-    return h + m/60 + s/60/60
-
-def julian(t):
-    """
-    Compute Julian date, relying heavily on jdcal package
-    """
-    y = t.year
-    m = t.month
-    d = t.day
-    h = hms2h(t.hour, t.minute, t.second)
-    return sum(jdcal.gcal2jd(y,m,d)) + h/24 + 0.5
-
 def compute_time(RAW):
     """
     Compute Julian date and then time and time2 for use in NetCDF file
     """
-    RAW['jd'] = np.array([julian(t) for t in RAW['datetime']])
+    RAW['jd'] = np.array([qaqc.julian(t) for t in RAW['datetime']])
 
     RAW['time'] = np.floor(RAW['jd'])
     # TODO: Hopefully this is correct... roundoff errors on big numbers...

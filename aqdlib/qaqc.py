@@ -4,6 +4,7 @@ import numpy as np
 from dateutil import parser
 import pytz
 import calendar
+import jdcal
 
 def plot_inwater(RAW, inwater_time, outwater_time):
     plt.figure(figsize=(12,8))
@@ -91,3 +92,28 @@ def coord_transform(vel1, vel2, vel3, heading, pitch, roll, T, cs):
                 w[i,j] = vel[2]
 
     return (u, v, w)
+def day2hms(d):
+    frachours = d * 24
+    h = np.int(np.floor(frachours))
+    fracmins = (frachours - h) * 60
+    m = np.int(np.floor(fracmins))
+    fracsecs = (fracmins - m) * 60
+    s = np.int(fracsecs)
+
+    return h, m, s
+
+def hms2h(h,m,s):
+    """
+    Convert hour, minute, second to fractional hour
+    """
+    return h + m/60 + s/60/60
+
+def julian(t):
+    """
+    Compute Julian date, relying heavily on jdcal package
+    """
+    y = t.year
+    m = t.month
+    d = t.day
+    h = hms2h(t.hour, t.minute, t.second)
+    return sum(jdcal.gcal2jd(y,m,d)) + h/24 + 0.5

@@ -22,16 +22,6 @@ def cdf_to_nc(cdf_filename, metadata, p1_ac=False):
 
     return VEL
 
-def day2hms(d):
-    frachours = d * 24
-    h = np.int(np.floor(frachours))
-    fracmins = (frachours - h) * 60
-    m = np.int(np.floor(fracmins))
-    fracsecs = (fracmins - m) * 60
-    s = np.int(fracsecs)
-
-    return h, m, s
-
 def load_cdf_amp_vel(cdf_filename, VEL, metadata):
     try:
         rg = Dataset(cdf_filename, 'r')
@@ -49,7 +39,7 @@ def load_cdf_amp_vel(cdf_filename, VEL, metadata):
             times = []
             for t, t2 in zip(time, time2):
                 year, mon, day, frac = jdcal.jd2gcal(t - 0.5, t2/86400000)
-                hour, minute, second = day2hms(frac)
+                hour, minute, second = qaqc.day2hms(frac)
                 times.append(dt.datetime(year, mon, day, hour, minute, second, tzinfo=pytz.utc))
             times = np.array(times)
 
