@@ -79,6 +79,12 @@ def load_cdf_amp_vel(cdf_filename, VEL, metadata):
 
         VEL['U'], VEL['V'], VEL['W'] = qaqc.coord_transform(vel1, vel2, vel3, heading, pitch, roll, T, rg.AQDCoordinateSystem)
 
+        VEL['heading'] = heading
+        VEL['pitch'] = pitch
+        VEL['roll'] = roll
+
+        VEL = qaqc.magvar_correct(VEL, metadata)
+
         VEL['AGC'] = (amp1 + amp2 + amp3) / 3
 
         VEL = qaqc.trim_vel(VEL, metadata)
@@ -144,7 +150,7 @@ def define_aqd_nc_file(nc_filename, VEL, metadata):
         u_1205.initial_instrument_height = metadata['initial_instrument_height']
         # u_1205.nominal_instrument_depth = metadata['nominal_instrument_depth'] # FIXME
         u_1205.height_depth_units = 'm'
-        # u_1205.serial_number = metadata['serial_number'] # FIXME
+        u_1205.serial_number = metadata['serial_number']
         u_1205.maximum = 0
         u_1205.minimum = 0
         # TODO: trim_method
@@ -159,7 +165,7 @@ def define_aqd_nc_file(nc_filename, VEL, metadata):
         v_1206.initial_instrument_height = metadata['initial_instrument_height']
         # v_1206.nominal_instrument_depth = metadata['nominal_instrument_depth'] # FIXME
         v_1206.height_depth_units = 'm'
-        # v_1206.serial_number = metadata['serial_number'] # FIXME
+        v_1206.serial_number = metadata['serial_number']
         v_1206.maximum = 0
         v_1206.minimum = 0
         # TODO: trim_method
@@ -174,7 +180,7 @@ def define_aqd_nc_file(nc_filename, VEL, metadata):
         w_1204.initial_instrument_height = metadata['initial_instrument_height']
         # w_1204.nominal_instrument_depth = metadata['nominal_instrument_depth'] # FIXME
         w_1204.height_depth_units = 'm'
-        # w_1204.serial_number = metadata['serial_number'] # FIXME
+        w_1204.serial_number = metadata['serial_number']
         w_1204.maximum = 0
         w_1204.minimum = 0
         # TODO: trim_method
@@ -233,8 +239,8 @@ def write_aqd_nc_file(nc_filename, VEL, metadata):
 
         rg['lat'][:] = metadata['latitude']
         rg['lon'][:] = metadata['longitude']
-        # rg['time'][:] = VEL['time']
-        # rg['time2'][:] = VEL['time2']
+        rg['time'][:] = VEL['time']
+        rg['time2'][:] = VEL['time2']
 
         # rg['bindist'] = VEL['bindist']
         rg['u_1205'][:] = np.reshape(VEL['U'].T, (M, 1, 1, N))

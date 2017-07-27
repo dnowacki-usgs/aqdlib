@@ -58,15 +58,19 @@ def coord_transform(vel1, vel2, vel3, heading, pitch, roll, T, cs):
     w = np.zeros((N,M))
 
     if cs == 'ENU':
-        print('Data already in earth coordinates; applying magnetic correction')
-        u =  vel1 * math.cos(magvar) + vel2 * math.sin(magvar);
-        v = -vel1 * math.sin(magvar) + vel2 * math.cos(magvar);
-        w = vel3;
+        print('Data already in Earth coordinates; doing nothing')
+
+        u = vel1
+        v = vel2
+        w = vel3
+        # u =  vel1 * math.cos(magvar) + vel2 * math.sin(magvar);
+        # v = -vel1 * math.sin(magvar) + vel2 * math.cos(magvar);
+        # w = vel3;
     elif cs == 'XYZ':
         # TODO: add XYZ
-        print("xyz")
+        print("Data are in XYZ coordinates; transforming to Earth coordinates")
     elif cs == 'BEAM':
-        print('Data are in BEAM coordinates; transforming to earth coordinates...')
+        print('Data are in BEAM coordinates; transforming to Earth coordinates')
 
         for i in range(N):
             hh = np.pi * (heading[i] - 90) / 180;
@@ -91,7 +95,44 @@ def coord_transform(vel1, vel2, vel3, heading, pitch, roll, T, cs):
                 v[i,j] = vel[1]
                 w[i,j] = vel[2]
 
-    return (u, v, w)
+    return u, v, w
+
+def magvar_correct(VEL, metadata):
+
+    if 'magnetic_variation_at_site' in metadata:
+        magvardeg = metadata['magnetic_variation_at_site']
+    elif 'magnetic_variation' in metadata:
+        magvardeg = metadata['magnetic_variation']
+    else:
+        print('No magnetic variation information provided; using zero for compass correction')
+        magvardeg = 0
+
+    print('Rotating heading by %f degrees' % magvardeg)
+
+    VEL['heading'] = VEL['heading'] + magvardeg
+    VEL['heading'][VEL['heading'] >= 360] = VEL['heading'][VEL['heading'] >= 360] - 360
+    VEL['heading'][VEL['heading'] < 0] = VEL['heading'][VEL['heading'] < 0] + 360
+
+    vel1 = VEL['U'].copy()
+    vel2 = VEL['V'].copy()
+
+    magvar = magvardeg * np.pi / 180
+
+    print('Rotating horizontal velocities by %f degrees' % magvardeg)
+
+    VEL['U'] =  vel1 * np.cos(magvar) + vel2 * np.sin(magvar)
+    VEL['V'] = -vel1 * np.sin(magvar) + vel2 * np.cos(magvar)
+
+    return VEL
+
+def trim_vel(VEL, metadata):
+    if 'trim_method' in metadata:
+        if metadata['trim_method'].lower() == 'water level' or metadata['trim_method'].lower() == 'water level sl':
+            print('User instructed to trim data at the surface using pressure data')
+            
+
+    return VEL
+
 def day2hms(d):
     frachours = d * 24
     h = np.int(np.floor(frachours))
