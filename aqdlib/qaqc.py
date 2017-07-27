@@ -103,7 +103,10 @@ def set_orientation(VEL, T, metadata):
 
     N, M = np.shape(VEL['U'])
 
-    Wdepth = np.nanmean(VEL['pressure']) + metadata['transducer_offset_from_bottom']
+    if 'press_ac' in VEL:
+        Wdepth = np.nanmean(VEL['press_ac']) + metadata['transducer_offset_from_bottom']
+    else:
+        Wdepth = np.nanmean(VEL['pressure']) + metadata['transducer_offset_from_bottom']
 
     blank2 = metadata['blanking_distance'] + metadata['transducer_offset_from_bottom']
     binn = metadata['bin_size']
@@ -119,6 +122,17 @@ def set_orientation(VEL, T, metadata):
         VEL['depths'] = np.arange(Wdepth - blank3 + binn, Wdepth - blank3 + binn * M, binn)
 
     return VEL, T
+
+def make_bin_depth(VEL, metadata):
+
+    N, M = np.shape(VEL['U'])
+
+    if 'press_ac' in VEL:
+        VEL['bin_depth'] = np.tile(VEL['press_ac'], (M, 1)) - np.tile(VEL['bindist'], (N, 1)).T;
+    else:
+        VEL['bin_depth'] = np.tile(VEL['pressure'], (M, 1)) - np.tile(VEL['bindist'], (N, 1)).T;
+
+    return VEL
 
 def magvar_correct(VEL, metadata):
 
@@ -148,6 +162,34 @@ def magvar_correct(VEL, metadata):
 
     return VEL
 
+def create_water_depth(VEL, metadata):
+    if 'initial_instrument_height' in metadata:
+        if 'press_ac' in VEL:
+            metadata['nominal_instrument_depth'] = np.nanmean(VEL['press_ac'])
+            VEL['Depth'] = metadata['nominal_instrument_depth']
+            wdepth = metadata['nominal_instrument_depth'] + metadata['initial_instrument_height']
+            metadata['WATER_DEPTH_source'] = 'water depth = MSL from pressure sensor, atmospherically corrected'
+            metadata['WATER_DEPTH_datum'] = 'MSL'
+        elif 'press' in VEL:
+            metadata['nominal_instrument_depth'] = np.nanmean(VEL['press'])
+            VEL['Depth'] = metadata['nominal_instrument_depth']
+            wdepth = metadata['nominal_instrument_depth'] + metadata['initial_instrument_height']
+            metadata['WATER_DEPTH_source'] = 'water depth = MSL from pressure sensor'
+            metadata['WATER_DEPTH_datum'] = 'MSL'
+        else:
+            wdepth = metadata['WATER_DEPTH']
+            metadata['nominal_instrument_depth'] = metadata['WATER_DEPTH'] - metadata['initial_instrument_height']
+            VEL['Depth'] = metadata['nominal_instrument_depth']
+        metadata['WATER_DEPTH'] = wdepth # TODO: why is this being redefined here? Seems redundant
+    elif 'nominal_instrument_depth' in metadata:
+        metadata['initial_instrument_height'] = metadata['WATER_DEPTH'] - metadata['nominal_instrument_depth']
+        VEL['Depth'] = metadata['nominal_instrument_depth']
+
+    if 'initial_instrument_height' not in metadata:
+        metadata['initial_instrument_height'] = 0 # TODO: do we really want to set to zero?
+
+    return VEL, metadata
+
 def trim_vel(VEL, metadata):
     N, M = np.shape(VEL['U'])
 
@@ -157,8 +199,10 @@ def trim_vel(VEL, metadata):
 # else
     # WL = press + INFO.Gatts.transducer_offset_from_bottom;
 # end
-
-    WL = VEL['pressure'] + metadata['transducer_offset_from_bottom']
+    if 'press_ac' in VEL:
+        WL = VEL['press_ac'] + metadata['transducer_offset_from_bottom']
+    else:
+        WL = VEL['pressure'] + metadata['transducer_offset_from_bottom']
 
     if 'trim_method' in metadata:
         blank = metadata['blanking_distance'] + metadata['transducer_offset_from_bottom'] # TODO: check this logic

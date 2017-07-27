@@ -8,13 +8,13 @@ import pytz
 import jdcal
 import datetime as dt
 
-def cdf_to_nc(cdf_filename, metadata, p1_ac=False):
+def cdf_to_nc(cdf_filename, metadata, p_1ac=False):
 
     nc_filename = metadata['filename'] + '.nc'
 
     VEL = {}
 
-    VEL = load_cdf_amp_vel(cdf_filename, VEL, metadata)
+    VEL = load_cdf_amp_vel(cdf_filename, VEL, metadata, p_1ac=p_1ac)
 
     define_aqd_nc_file(nc_filename, VEL, metadata)
 
@@ -22,7 +22,7 @@ def cdf_to_nc(cdf_filename, metadata, p1_ac=False):
 
     return VEL
 
-def load_cdf_amp_vel(cdf_filename, VEL, metadata):
+def load_cdf_amp_vel(cdf_filename, VEL, metadata, p_1ac=False):
     try:
         rg = Dataset(cdf_filename, 'r')
 
@@ -30,8 +30,8 @@ def load_cdf_amp_vel(cdf_filename, VEL, metadata):
         if 'good_ens' in metadata:
             # we have good ensemble indices in the metadata
             print('Using good_ens')
-            S = good_ens[0]
-            E = good_ens[1]
+            S = metadata['good_ens'][0]
+            E = metadata['good_ens'][1]
         else:
             # we clip by the times in/out of water as specified in the metadata
             print('Using Deployment_date and Recovery_date')
@@ -73,11 +73,16 @@ def load_cdf_amp_vel(cdf_filename, VEL, metadata):
         VEL['time'] = rg['time'][S:E]
         VEL['time2'] = rg['time2'][S:E]
 
+        if p_1ac is not False:
+            VEL['press_ac'] = p_1ac[S:E]
+
+
+        VEL, metadata = qaqc.create_water_depth(VEL, metadata)
+
         # initialize arrays
         VEL['U'] = np.zeros(np.shape(vel1))
         VEL['V'] = np.zeros(np.shape(vel2))
         VEL['W'] = np.zeros(np.shape(vel3))
-
 
         VEL, T = qaqc.set_orientation(VEL, T, metadata)
 
@@ -93,10 +98,14 @@ def load_cdf_amp_vel(cdf_filename, VEL, metadata):
 
         VEL = qaqc.trim_vel(VEL, metadata)
 
+        VEL = qaqc.make_bin_depth(VEL, metadata)
+
         return VEL
 
     finally:
         rg.close()
+
+
 
 def define_aqd_nc_file(nc_filename, VEL, metadata):
     try:
@@ -144,67 +153,52 @@ def define_aqd_nc_file(nc_filename, VEL, metadata):
         bindistid.initial_instrument_height = metadata['initial_instrument_height']
         bindistid.note = 'distance is along profile from instrument head to center of bin'
 
+        # put in attributes common to all velocity components
+        def add_vel_attributes(vel, metadata):
+            vel.units = 'cm/s'
+            vel.sensor_type = metadata['INST_TYPE']
+            vel.initial_instrument_height = metadata['initial_instrument_height']
+            vel.nominal_instrument_depth = metadata['nominal_instrument_depth']
+            vel.serial_number = metadata['serial_number']
+            vel.maximum = 0
+            vel.minimum = 0
+            vel.height_depth_units = 'm'
+            # TODO: why do we only do trim_method for Water Level SL?
+            if 'trim_method' in metadata and metadata['trim_method'].lower() == 'water level sl':
+                vel.note ='Velocity bins trimmed if out of water or if side lobes intersect sea surface'
+
         u_1205 = rg.createVariable('u_1205', 'f', ('depth', 'lat', 'lon', 'time',), zlib=True)
-        # u_1205.name = 'u'
         u_1205.setncattr('name', 'u')
         u_1205.long_name = 'Eastward Velocity'
         u_1205.generic_name = 'u'
-        u_1205.units = 'cm/s'
         u_1205.epic_code = 1205
-        u_1205.sensor_type = metadata['INST_TYPE']
-        u_1205.initial_instrument_height = metadata['initial_instrument_height']
-        # u_1205.nominal_instrument_depth = metadata['nominal_instrument_depth'] # FIXME
-        u_1205.height_depth_units = 'm'
-        u_1205.serial_number = metadata['serial_number']
-        u_1205.maximum = 0
-        u_1205.minimum = 0
-        # TODO: trim_method
+        add_vel_attributes(u_1205, metadata)
 
         v_1206 = rg.createVariable('v_1206', 'f', ('depth', 'lat', 'lon', 'time',), zlib=True)
         v_1206.setncattr('name', 'v')
         v_1206.long_name = 'Northward Velocity'
         v_1206.generic_name = 'v'
-        v_1206.units = 'cm/s'
         v_1206.epic_code = 1206
-        v_1206.sensor_type = metadata['INST_TYPE']
-        v_1206.initial_instrument_height = metadata['initial_instrument_height']
-        # v_1206.nominal_instrument_depth = metadata['nominal_instrument_depth'] # FIXME
-        v_1206.height_depth_units = 'm'
-        v_1206.serial_number = metadata['serial_number']
-        v_1206.maximum = 0
-        v_1206.minimum = 0
-        # TODO: trim_method
+        add_vel_attributes(v_1206, metadata)
 
         w_1204 = rg.createVariable('w_1204', 'f', ('depth', 'lat', 'lon', 'time',), zlib=True)
         w_1204.setncattr('name', 'w')
         w_1204.long_name = 'Vertical Velocity'
         w_1204.generic_name = 'w'
-        w_1204.units = 'cm/s'
         w_1204.epic_code = 1204
-        w_1204.sensor_type = metadata['INST_TYPE']
-        w_1204.initial_instrument_height = metadata['initial_instrument_height']
-        # w_1204.nominal_instrument_depth = metadata['nominal_instrument_depth'] # FIXME
-        w_1204.height_depth_units = 'm'
-        w_1204.serial_number = metadata['serial_number']
-        w_1204.maximum = 0
-        w_1204.minimum = 0
-        # TODO: trim_method
-
-        # if isfield(metadata,'trim_method') & strcmp(metadata.trim_method,'Water Level SL')
-        #     netcdf.putAtt(ncid,Uid,'note','Velocity bins trimmed if out of water or if side lobes intersect sea surface');
-        # end
+        add_vel_attributes(w_1204, metadata)
 
         Pressid = rg.createVariable('P_1', 'f', ('lat', 'lon', 'time',), zlib=True)
         Pressid.units = 'dbar'
         Pressid.epic_code = 1
         Pressid.setncattr('name', 'P')
-        Pressid.long_name = 'PRESSURE (DB)          ' # TODO: why so many extra spaces?
+        Pressid.long_name = 'PRESSURE (DB)'
         Pressid.generic_name = 'depth'
         Pressid.minimum = DOUBLE_FILL
         Pressid.maximum = DOUBLE_FILL
         # netcdf.putAtt(ncid,Pressid,'serial_number',metadata.cdfmeta.AQDSerial_Number); #FIXME
         Pressid.initial_instrument_height = metadata['initial_instrument_height']
-        # netcdf.putAtt(ncid,Pressid,'nominal_instrument_depth',metadata.nominal_instrument_depth); #FIXME
+        Pressid.nominal_instrument_depth = metadata['nominal_instrument_depth']
 
         Tempid = rg.createVariable('Tx_1211', 'f', ('lat', 'lon', 'time',), zlib=True)
         Tempid.units = 'C'
@@ -216,7 +210,7 @@ def define_aqd_nc_file(nc_filename, VEL, metadata):
         Tempid.maximum = DOUBLE_FILL
         # netcdf.putAtt(ncid,Pressid,'serial_number',metadata.cdfmeta.AQDSerial_Number); #FIXME
         Tempid.initial_instrument_height = metadata['initial_instrument_height']
-        # netcdf.putAtt(ncid,Pressid,'nominal_instrument_depth',metadata.nominal_instrument_depth); #FIXME
+        Tempid.nominal_instrument_depth = metadata['nominal_instrument_depth']
 
         AGCid = rg.createVariable('AGC_1202', 'f', ('depth', 'lat', 'lon', 'time',), zlib=True)
         AGCid.units = 'counts'
@@ -231,7 +225,34 @@ def define_aqd_nc_file(nc_filename, VEL, metadata):
         # netcdf.putAtt(ncid,Pressid,'serial_number',metadata.cdfmeta.AQDSerial_Number); #FIXME
         AGCid.initial_instrument_height = metadata['initial_instrument_height']
         AGCid.height_depth_units = 'm'
-        # netcdf.putAtt(ncid,Pressid,'nominal_instrument_depth',metadata.nominal_instrument_depth); #FIXME
+        AGCid.nominal_instrument_depth = metadata['nominal_instrument_depth']
+
+        # TODO: add heading/pitch/roll variables
+
+        # TODO: add analog input variables (OBS, NTU, etc)
+
+        bdepid = rg.createVariable('bin_depth', 'f', ('depth', 'lat', 'lon', 'time',), zlib=True)
+        bdepid.setncattr('name', 'bin depth')
+        bdepid.units = 'm'
+        bdepid.initial_instrument_height = metadata['initial_instrument_height']
+        bdepid.minimum = 0 # why 0 instead of double_fill??
+        bdepid.maximum = 0
+        if 'press_ac' in VEL:
+            bdepid.note = 'Actual depth time series of velocity bins. Calculated as corrected pressure(P_1ac) - bindist.'
+        else:
+            bdepid.note = 'Actual depth time series of velocity bins. Calculated as pressure(P_1) - bindist.'
+
+        if 'press_ac' in VEL:
+            ACPressid = rg.createVariable('P_1ac', 'f', ('lat', 'lon', 'time',), zlib=True)
+            ACPressid.units = 'dbar'
+            ACPressid.setncattr('name', 'Pac') # TODO: is Pac correct?
+            ACPressid.long_name = 'CORRECTED PRESSURE (DB)'
+            ACPressid.minimum = DOUBLE_FILL # why double_fill??
+            ACPressid.maximum = DOUBLE_FILL
+            # netcdf.putAtt(ncid,CPressid,'serial_number',metadata.cdfmeta.AQDSerial_Number); # FIXME
+            ACPressid.initial_instrument_height = metadata['initial_instrument_height']
+            ACPressid.nominal_instrument_depth = metadata['nominal_instrument_depth']
+            ACPressid.note = 'Corrected for variations in atmospheric pressure using nearby MET station'
 
     finally:
         rg.close()
@@ -249,13 +270,18 @@ def write_aqd_nc_file(nc_filename, VEL, metadata):
         rg['time2'][:] = VEL['time2']
 
         rg['bindist'][:] = VEL['bindist']
+        rg['bin_depth'][:] = np.reshape(VEL['bin_depth'].T, (M, 1, 1, N))
         rg['u_1205'][:] = np.reshape(VEL['U'].T, (M, 1, 1, N))
         rg['v_1206'][:] = np.reshape(VEL['V'].T, (M, 1, 1, N))
         rg['w_1204'][:] = np.reshape(VEL['W'].T, (M, 1, 1, N))
+        rg['AGC_1202'][:] = np.reshape(VEL['AGC'].T, (M, 1, 1, N))
 
         rg['P_1'][:] = VEL['pressure'][np.newaxis, np.newaxis, :]
+
+        if 'press_ac' in VEL:
+            rg['P_1ac'][:] = VEL['press_ac'][np.newaxis, np.newaxis, :]
+
         rg['Tx_1211'][:] = VEL['temp'][np.newaxis, np.newaxis, :]
-        rg['AGC_1202'][:] = np.reshape(VEL['AGC'].T, (M, 1, 1, N))
 
     finally:
         print('Done writing NetCDF file')
