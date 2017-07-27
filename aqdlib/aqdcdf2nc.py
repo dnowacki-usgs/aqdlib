@@ -26,13 +26,15 @@ def load_cdf_amp_vel(cdf_filename, VEL, metadata):
     try:
         rg = Dataset(cdf_filename, 'r')
 
-        # TODO: need to clip start and end properly
-
         # clip either by ensemble indices or by the deployment and recovery date specified in metadata
         if 'good_ens' in metadata:
+            # we have good ensemble indices in the metadata
+            print('Using good_ens')
             S = good_ens[0]
             E = good_ens[1]
         else:
+            # we clip by the times in/out of water as specified in the metadata
+            print('Using Deployment_date and Recovery_date')
             time = rg['time'][:]
             time2 = rg['time2'][:]
 
@@ -47,6 +49,8 @@ def load_cdf_amp_vel(cdf_filename, VEL, metadata):
             E = np.argwhere(times <= pytz.utc.localize(dateutil.parser.parse(rg.Recovery_date)))[-1]
 
         print('Indices of starting and ending bursts: S:', S, 'E:', E)
+
+        # load data from CDF file, specifying start/end bursts
         vel1 = rg['VEL1'][:, S:E]
         vel2 = rg['VEL2'][:, S:E]
         vel3 = rg['VEL3'][:, S:E]
