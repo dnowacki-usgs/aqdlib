@@ -202,16 +202,11 @@ def create_water_depth(VEL, metadata):
 def trim_vel(VEL, metadata, INFO):
     N, M = np.shape(VEL['U'])
 
-    # TODO: need to account for press_ac
-    # if exist('press_ac','var')
-    # WL = press_ac + INFO.Gatts.transducer_offset_from_bottom;
-# else
-    # WL = press + INFO.Gatts.transducer_offset_from_bottom;
-# end
     if 'press_ac' in VEL:
-        WL = VEL['press_ac'] + metadata['transducer_offset_from_bottom']
+        WL = VEL['press_ac'] + INFO['transducer_offset_from_bottom']
     else:
-        WL = VEL['pressure'] + metadata['transducer_offset_from_bottom']
+        WL = VEL['pressure'] + INFO['transducer_offset_from_bottom']
+
 
     if 'trim_method' in metadata:
         blank = INFO['AQDBlankingDistance'] + metadata['transducer_offset_from_bottom'] # TODO: check this logic
@@ -224,12 +219,16 @@ def trim_vel(VEL, metadata, INFO):
             elif metadata['trim_method'].lower() == 'water level sl':
                 print('Trimming using water level and sidelobes')
                 dist2 = np.arange(blank + binn, (binn * (M-1)) + blank + binn, binn) # TODO: This seems kludgey, can we just read from hdr instead?
+            # TODO: Why does matlab incorporate cosd of the beam angle??
 
-            # need to tile distances and water levels and then compare them
             d2 = np.tile(dist2, (np.shape(WL)[0], 1))
             WL2 = np.tile(WL, (np.shape(d2)[1], 1)).T
-            goods = d2 < WL2
-            bads = np.logical_not(goods)
+            
+            print('new D2')
+            if metadata['trim_method'].lower() == 'water level':
+                bads = d2 >= WL2
+            elif metadata['trim_method'].lower() == 'water level sl':
+                bads = d2 >= WL2 * np.cos(np.deg2rad(INFO['AQDBeamAngle']))
 
             VEL['U'][bads] = np.nan
             VEL['V'][bads] = np.nan
