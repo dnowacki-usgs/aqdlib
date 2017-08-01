@@ -4,7 +4,8 @@ import numpy as np
 import datetime as dt
 import pytz
 from netCDF4 import Dataset
-from aqdlib import DOUBLE_FILL
+# from aqdlib import aqdlib.DOUBLE_FILL
+import aqdlib
 import qaqc
 
 def prf_to_cdf(basefile, metadata):
@@ -28,7 +29,8 @@ def prf_to_cdf(basefile, metadata):
     RAW = load_amp_vel(RAW, basefile)
 
     # Compute time stamps
-    RAW = compute_time(RAW)
+    print('about to enter...')
+    RAW = compute_time(RAW, instmeta)
 
     # Deal with metadata peculiarities
     metadata = check_metadata(metadata, instmeta)
@@ -46,7 +48,7 @@ def prf_to_cdf(basefile, metadata):
     RAW = insert_fill_values(RAW)
 
     # configure file
-    cdf_filename = '/Volumes/Backstaff/field/gb_proc/1076a/1076a1aqd/' + metadata['filename'] + '-raw.cdf' # TODO: fix the path
+    cdf_filename = metadata['filename'] + '-raw.cdf' # TODO: fix the path
     print('Opening %s' % cdf_filename)
 
     define_aqd_cdf_file(cdf_filename, RAW, metadata)
@@ -66,7 +68,7 @@ def insert_fill_values(RAW):
     for k in RAW:
         if k not in ['instmeta', 'time', 'time2', 'datetime'] and np.max(np.shape(RAW[k])) == np.max(np.shape(RAW['jd'])):
             nanind = np.where(np.isnan(RAW[k]))
-            RAW[k][nanind] = DOUBLE_FILL
+            RAW[k][nanind] = aqdlib.DOUBLE_FILL
 
     return RAW
 
@@ -99,8 +101,8 @@ def check_metadata(metadata, instmeta):
     if 'initial_instrument_height' not in metadata or np.isnan(metadata['initial_instrument_height']):
         metadata['initial_instrument_height'] = 0
 
-    for k in instmeta:
-        print(k)
+    # for k in instmeta:
+    #     print(k)
     metadata['serial_number'] = instmeta['AQDSerial_Number']
 
     # update metadata from Aquadopp header to CMG standard so that various
@@ -163,6 +165,8 @@ def write_aqd_cdf_data(cdf_filename, RAW, metadata):
         rg['depth'][:] = RAW['Depths']
         rg['bindist'][:] = RAW['bindist']
 
+        print ('rg shape:', np.shape(rg['VEL1'][:]))
+        print('V1 shape:', np.shape(RAW['V1']))
         rg['VEL1'][:] = RAW['V1'].T
         rg['VEL2'][:] = RAW['V2'].T
         rg['VEL3'][:] = RAW['V3'].T
@@ -212,35 +216,35 @@ def define_aqd_cdf_file(cdf_filename, RAW, metadata):
         lon = rg.createDimension('lon', 1)
         Tmatrix = rg.createDimension('Tmatrix', 3)
 
-        timeid = rg.createVariable('time', 'i', ('time',)) # 'i' == NC_INT
+        timeid = rg.createVariable('time', 'i', ('time',), fill_value=False) # 'i' == NC_INT
         timeid.FORTRAN_format = 'F10.2'
         timeid.units = 'True Julian Day'
         timeid.type = 'UNEVEN'
         timeid.epic_code = 624
 
-        time2id = rg.createVariable('time2', 'i', ('time',)) # 'i' == NC_INT
+        time2id = rg.createVariable('time2', 'i', ('time',), fill_value=False) # 'i' == NC_INT
         time2id.FORTRAN_format = 'F10.2'
         time2id.units = 'msec since 0:00 GMT'
         time2id.type ='UNEVEN'
         time2id.epic_code = 624
 
-        latid = rg.createVariable('lat', 'f', ('lat',))
+        latid = rg.createVariable('lat', 'f', ('lat',), fill_value=False)
         latid.FORTRAN_format = 'F10.4'
         latid.units = 'degree_north'
         latid.type = 'EVEN'
         latid.epic_code = 500
-        latid.minimum = DOUBLE_FILL
-        latid.maximum = DOUBLE_FILL
+        latid.minimum = aqdlib.DOUBLE_FILL
+        latid.maximum = aqdlib.DOUBLE_FILL
 
-        lonid = rg.createVariable('lon', 'f', ('lon',))
+        lonid = rg.createVariable('lon', 'f', ('lon',), fill_value=False)
         lonid.FORTRAN_format = 'F10.4'
         lonid.units = 'degree_east'
         lonid.type = 'EVEN'
         lonid.epic_code = 502
-        lonid.minimum = DOUBLE_FILL
-        lonid.maximum = DOUBLE_FILL
+        lonid.minimum = aqdlib.DOUBLE_FILL
+        lonid.maximum = aqdlib.DOUBLE_FILL
 
-        depthid = rg.createVariable('depth', 'f', ('depth',))
+        depthid = rg.createVariable('depth', 'f', ('depth',), fill_value=False)
         depthid.units = 'm'
         depthid.long_name = 'mean water depth'
         depthid.bin_size = metadata['bin_size']
@@ -248,7 +252,7 @@ def define_aqd_cdf_file(cdf_filename, RAW, metadata):
         depthid.bin_count = metadata['bin_count']
         depthid.transducer_offset_from_bottom = metadata['transducer_offset_from_bottom']
 
-        bindistid = rg.createVariable('bindist', 'f', ('depth',))
+        bindistid = rg.createVariable('bindist', 'f', ('depth',), fill_value=False)
         bindistid.units = 'm'
         bindistid.long_name = 'distance from transducer head'
         bindistid.bin_size = metadata['bin_size']
@@ -256,27 +260,27 @@ def define_aqd_cdf_file(cdf_filename, RAW, metadata):
         bindistid.bin_count = metadata['bin_count']
         bindistid.transducer_offset_from_bottom = metadata['transducer_offset_from_bottom']
 
-        Tempid = rg.createVariable('Temperature', 'f', ('time',))
+        Tempid = rg.createVariable('Temperature', 'f', ('time',), fill_value=False)
         Tempid.units = 'C'
         Tempid.long_name = 'TEMPERATURE (C)'
         Tempid.generic_name = 'temp'
 
-        Pressid = rg.createVariable('Pressure', 'f', ('time',))
+        Pressid = rg.createVariable('Pressure', 'f', ('time',), fill_value=False)
         Pressid.units = 'dbar'
         Pressid.long_name = 'Pressure (dbar)'
         Pressid.generic_name = 'press'
 
-        VEL1id = rg.createVariable('VEL1', 'f', ('depth', 'time',))
+        VEL1id = rg.createVariable('VEL1', 'f', ('depth', 'time',), fill_value=False)
         VEL1id.units = 'cm/s'
         VEL1id.Type = 'scalar'
         VEL1id.transducer_offset_from_bottom = metadata['transducer_offset_from_bottom']
 
-        VEL2id = rg.createVariable('VEL2', 'f', ('depth', 'time',))
+        VEL2id = rg.createVariable('VEL2', 'f', ('depth', 'time',), fill_value=False)
         VEL2id.units = 'cm/s'
         VEL2id.Type = 'scalar'
         VEL2id.transducer_offset_from_bottom = metadata['transducer_offset_from_bottom']
 
-        VEL3id = rg.createVariable('VEL3', 'f', ('depth', 'time',))
+        VEL3id = rg.createVariable('VEL3', 'f', ('depth', 'time',), fill_value=False)
         VEL3id.units = 'cm/s'
         VEL3id.Type = 'scalar'
         VEL3id.transducer_offset_from_bottom = metadata['transducer_offset_from_bottom']
@@ -294,47 +298,47 @@ def define_aqd_cdf_file(cdf_filename, RAW, metadata):
             VEL2id.long_name = 'Beam 2 current velocity'
             VEL3id.long_name = 'Beam 3 current velocity'
 
-        AMP1id = rg.createVariable('AMP1', 'f', ('depth', 'time',))
+        AMP1id = rg.createVariable('AMP1', 'f', ('depth', 'time',), fill_value=False)
         AMP1id.long_name = 'Beam 1 Echo Amplitude'
         AMP1id.units = 'counts'
         AMP1id.Type = 'scalar'
         AMP1id.transducer_offset_from_bottom = metadata['transducer_offset_from_bottom']
 
-        AMP2id = rg.createVariable('AMP2', 'f', ('depth', 'time',))
+        AMP2id = rg.createVariable('AMP2', 'f', ('depth', 'time',), fill_value=False)
         AMP2id.long_name = 'Beam 2 Echo Amplitude'
         AMP2id.units = 'counts'
         AMP2id.Type = 'scalar'
         AMP2id.transducer_offset_from_bottom = metadata['transducer_offset_from_bottom']
 
-        AMP3id = rg.createVariable('AMP3', 'f', ('depth', 'time',))
+        AMP3id = rg.createVariable('AMP3', 'f', ('depth', 'time',), fill_value=False)
         AMP3id.long_name = 'Beam 3 Echo Amplitude'
         AMP3id.units = 'counts'
         AMP3id.Type = 'scalar'
         AMP3id.transducer_offset_from_bottom = metadata['transducer_offset_from_bottom']
 
-        Battid = rg.createVariable('Battery', 'f', ('time',))
+        Battid = rg.createVariable('Battery', 'f', ('time',), fill_value=False)
         Battid.units = 'Volts'
         Battid.long_name = 'Battery Voltage'
 
-        Pitchid = rg.createVariable('Pitch', 'f', ('time',))
+        Pitchid = rg.createVariable('Pitch', 'f', ('time',), fill_value=False)
         Pitchid.units = 'degrees'
         Pitchid.long_name = 'Instrument Pitch'
 
-        Rollid  = rg.createVariable('Roll', 'f', ('time',))
+        Rollid  = rg.createVariable('Roll', 'f', ('time',), fill_value=False)
         Rollid.units = 'degrees'
         Rollid.long_name = 'Instrument Roll'
 
-        Headid  = rg.createVariable('Heading', 'f', ('time',))
+        Headid  = rg.createVariable('Heading', 'f', ('time',), fill_value=False)
         Headid.units = 'degrees'
         Headid.long_name = 'Instrument Heading'
         Headid.datum = 'magnetic north'
 
-        Tmatid = rg.createVariable('TransMatrix', 'f', ('Tmatrix', 'Tmatrix',))
+        Tmatid = rg.createVariable('TransMatrix', 'f', ('Tmatrix', 'Tmatrix',), fill_value=False)
         Tmatid.long_name = 'Transformation Matrix for this Aquadopp'
 
         for n in ['1', '2']:
             if 'AnalogInput' + n in metadata:
-                Anaid = rg.createVariable('AnalogInput' + n, 'f', ('time',))
+                Anaid = rg.createVariable('AnalogInput' + n, 'f', ('time',), fill_value=False)
                 Anaid.units = 'Volts'
                 Anaid.sensor_type = metadata['AnalogInput1']['sensor_type']
                 Anaid.sensor_manufacturer = metadata['AnalogInput1']['sensor_manufacturer']
@@ -373,15 +377,19 @@ def write_metadata(rg, metadata):
     for k in metadata.keys():
         setattr(rg, k, metadata[k])
 
-def compute_time(RAW):
+def compute_time(RAW, instmeta):
     """
     Compute Julian date and then time and time2 for use in NetCDF file
     """
+    # shift times to center of ensemble
+    RAW['datetime'] = RAW['datetime'] + dt.timedelta(seconds=instmeta['AQDAverageInterval']/2)
+
     RAW['jd'] = np.array([qaqc.julian(t) for t in RAW['datetime']])
 
     RAW['time'] = np.floor(RAW['jd'])
     # TODO: Hopefully this is correct... roundoff errors on big numbers...
-    RAW['time2'] = np.round((RAW['jd'] - RAW['time'])*86400000)
+    print('new datetime comp')
+    RAW['time2'] = (RAW['jd'] - np.floor(RAW['jd']))*86400000
 
     # TODO: start_time and stop_time into metadata
     # metadata['start_time'] =

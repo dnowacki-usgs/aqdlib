@@ -2,11 +2,11 @@ from __future__ import division, print_function
 from netCDF4 import Dataset
 import numpy as np
 import qaqc
-from aqdlib import DOUBLE_FILL
 import dateutil
 import pytz
 import jdcal
 import datetime as dt
+import aqdlib
 
 def cdf_to_nc(cdf_filename, metadata, p_1ac=False):
 
@@ -14,9 +14,9 @@ def cdf_to_nc(cdf_filename, metadata, p_1ac=False):
 
     VEL = {}
 
-    VEL = load_cdf_amp_vel(cdf_filename, VEL, metadata, p_1ac=p_1ac)
+    VEL, INFO = load_cdf_amp_vel(cdf_filename, VEL, metadata, p_1ac=p_1ac)
 
-    define_aqd_nc_file(nc_filename, VEL, metadata)
+    define_aqd_nc_file(nc_filename, VEL, metadata, INFO)
 
     write_aqd_nc_file(nc_filename, VEL, metadata)
 
@@ -25,6 +25,12 @@ def cdf_to_nc(cdf_filename, metadata, p_1ac=False):
 def load_cdf_amp_vel(cdf_filename, VEL, metadata, p_1ac=False):
     try:
         rg = Dataset(cdf_filename, 'r')
+
+        # Create INFO dict with global attributes from dataset
+        INFO = {}
+        for k, v in rg.__dict__.iteritems():
+            INFO[k] = v
+            print(k, INFO[k])
 
         # clip either by ensemble indices or by the deployment and recovery date specified in metadata
         if 'good_ens' in metadata:
@@ -45,10 +51,17 @@ def load_cdf_amp_vel(cdf_filename, VEL, metadata, p_1ac=False):
                 times.append(dt.datetime(year, mon, day, hour, minute, second, tzinfo=pytz.utc))
             times = np.array(times)
 
-            S = np.argwhere(times >= pytz.utc.localize(dateutil.parser.parse(rg.Deployment_date)))[0]
-            E = np.argwhere(times <= pytz.utc.localize(dateutil.parser.parse(rg.Recovery_date)))[-1]
+            print('first burst in full file:', times[0])
+            print('last burst in full file:', times[-1])
+            print(pytz.utc.localize(dateutil.parser.parse(rg.Deployment_date)))
+
+            S = np.argwhere(times > pytz.utc.localize(dateutil.parser.parse(rg.Deployment_date)))[0].item() # .item() to avoid error when indexing
+            E = np.argwhere(times > pytz.utc.localize(dateutil.parser.parse(rg.Recovery_date)))[0].item() # do this because of the way python index ranges
+            print (np.argwhere(times <= pytz.utc.localize(dateutil.parser.parse(rg.Recovery_date))))
+            print('times of start and end bursts:', times[S], times[E])
 
         print('Indices of starting and ending bursts: S:', S, 'E:', E)
+
 
         # load data from CDF file, specifying start/end bursts
         # also transpose data so dims are TIME x DEPTH
@@ -76,7 +89,6 @@ def load_cdf_amp_vel(cdf_filename, VEL, metadata, p_1ac=False):
         if p_1ac is not False:
             VEL['press_ac'] = p_1ac[S:E]
 
-
         VEL, metadata = qaqc.create_water_depth(VEL, metadata)
 
         # initialize arrays
@@ -84,7 +96,7 @@ def load_cdf_amp_vel(cdf_filename, VEL, metadata, p_1ac=False):
         VEL['V'] = np.zeros(np.shape(vel2))
         VEL['W'] = np.zeros(np.shape(vel3))
 
-        VEL, T = qaqc.set_orientation(VEL, T, metadata)
+        VEL, T = qaqc.set_orientation(VEL, T, metadata, INFO)
 
         VEL['U'], VEL['V'], VEL['W'] = qaqc.coord_transform(vel1, vel2, vel3, heading, pitch, roll, T, rg.AQDCoordinateSystem)
 
@@ -96,23 +108,23 @@ def load_cdf_amp_vel(cdf_filename, VEL, metadata, p_1ac=False):
 
         VEL['AGC'] = (amp1 + amp2 + amp3) / 3
 
-        VEL = qaqc.trim_vel(VEL, metadata)
+        VEL = qaqc.trim_vel(VEL, metadata, INFO)
 
         VEL = qaqc.make_bin_depth(VEL, metadata)
 
-        return VEL
+        return VEL, INFO
 
     finally:
         rg.close()
 
 
 
-def define_aqd_nc_file(nc_filename, VEL, metadata):
+def define_aqd_nc_file(nc_filename, VEL, metadata, INFO):
     try:
         N, M = np.shape(VEL['U'])
         print('N:', N, 'M:', M, 'in define_aqd_nc_file')
 
-        rg = Dataset('/Volumes/Backstaff/field/gb_proc/1076a/1076a1aqd/' + nc_filename, 'w', format='NETCDF4', clobber=True)
+        rg = Dataset(nc_filename, 'w', format='NETCDF4', clobber=True)
 
         time = rg.createDimension('time', 0)
         depth = rg.createDimension('depth', M)
@@ -149,17 +161,17 @@ def define_aqd_nc_file(nc_filename, VEL, metadata):
 
         bindistid = rg.createVariable('bindist', 'f', ('depth',))
         # TODO: Loop through the attribute names and values as done in Matlab
-        bindistid.blanking_distance = metadata['blanking_distance'] # TODO: the Matlab one uses INFO
+        bindistid.blanking_distance = INFO['AQDBlankingDistance']
         bindistid.initial_instrument_height = metadata['initial_instrument_height']
         bindistid.note = 'distance is along profile from instrument head to center of bin'
 
         # put in attributes common to all velocity components
-        def add_vel_attributes(vel, metadata):
+        def add_vel_attributes(vel, metadata, INFO):
             vel.units = 'cm/s'
-            vel.sensor_type = metadata['INST_TYPE']
+            vel.sensor_type = INFO['INST_TYPE']
             vel.initial_instrument_height = metadata['initial_instrument_height']
             vel.nominal_instrument_depth = metadata['nominal_instrument_depth']
-            vel.serial_number = metadata['serial_number']
+            vel.serial_number = INFO['serial_number']
             vel.maximum = 0
             vel.minimum = 0
             vel.height_depth_units = 'm'
@@ -172,21 +184,21 @@ def define_aqd_nc_file(nc_filename, VEL, metadata):
         u_1205.long_name = 'Eastward Velocity'
         u_1205.generic_name = 'u'
         u_1205.epic_code = 1205
-        add_vel_attributes(u_1205, metadata)
+        add_vel_attributes(u_1205, metadata, INFO)
 
         v_1206 = rg.createVariable('v_1206', 'f', ('depth', 'lat', 'lon', 'time',), zlib=True)
         v_1206.setncattr('name', 'v')
         v_1206.long_name = 'Northward Velocity'
         v_1206.generic_name = 'v'
         v_1206.epic_code = 1206
-        add_vel_attributes(v_1206, metadata)
+        add_vel_attributes(v_1206, metadata, INFO)
 
         w_1204 = rg.createVariable('w_1204', 'f', ('depth', 'lat', 'lon', 'time',), zlib=True)
         w_1204.setncattr('name', 'w')
         w_1204.long_name = 'Vertical Velocity'
         w_1204.generic_name = 'w'
         w_1204.epic_code = 1204
-        add_vel_attributes(w_1204, metadata)
+        add_vel_attributes(w_1204, metadata, INFO)
 
         Pressid = rg.createVariable('P_1', 'f', ('lat', 'lon', 'time',), zlib=True)
         Pressid.units = 'dbar'
@@ -194,8 +206,8 @@ def define_aqd_nc_file(nc_filename, VEL, metadata):
         Pressid.setncattr('name', 'P')
         Pressid.long_name = 'PRESSURE (DB)'
         Pressid.generic_name = 'depth'
-        Pressid.minimum = DOUBLE_FILL
-        Pressid.maximum = DOUBLE_FILL
+        Pressid.minimum = aqdlib.DOUBLE_FILL
+        Pressid.maximum = aqdlib.DOUBLE_FILL
         # netcdf.putAtt(ncid,Pressid,'serial_number',metadata.cdfmeta.AQDSerial_Number); #FIXME
         Pressid.initial_instrument_height = metadata['initial_instrument_height']
         Pressid.nominal_instrument_depth = metadata['nominal_instrument_depth']
@@ -206,8 +218,8 @@ def define_aqd_nc_file(nc_filename, VEL, metadata):
         Tempid.setncattr('name', 'Tx')
         Tempid.long_name = 'Instrument Transducer Temperature'
         Tempid.generic_name = 'temp'
-        Tempid.minimum = DOUBLE_FILL
-        Tempid.maximum = DOUBLE_FILL
+        Tempid.minimum = aqdlib.DOUBLE_FILL
+        Tempid.maximum = aqdlib.DOUBLE_FILL
         # netcdf.putAtt(ncid,Pressid,'serial_number',metadata.cdfmeta.AQDSerial_Number); #FIXME
         Tempid.initial_instrument_height = metadata['initial_instrument_height']
         Tempid.nominal_instrument_depth = metadata['nominal_instrument_depth']
@@ -220,14 +232,63 @@ def define_aqd_nc_file(nc_filename, VEL, metadata):
         AGCid.generic_name = 'AGC'
         # AGCid.sensor_type = INST_TYPE # FIXME
         AGCid.minimum = 0
-        AGCid.maximum = 0 # TODO: why are min/max different (0 vs DOUBLE_FILL for others?)
+        AGCid.maximum = 0 # TODO: why are min/max different (0 vs aqdlib.DOUBLE_FILL for others?)
         # netcdf.putAtt(ncid,AGCid,'sensor_type',metadata.cdfmeta.INST_TYPE); #FIXME
         # netcdf.putAtt(ncid,Pressid,'serial_number',metadata.cdfmeta.AQDSerial_Number); #FIXME
         AGCid.initial_instrument_height = metadata['initial_instrument_height']
         AGCid.height_depth_units = 'm'
         AGCid.nominal_instrument_depth = metadata['nominal_instrument_depth']
 
-        # TODO: add heading/pitch/roll variables
+
+        headid = rg.createVariable('Hdg_1215', 'f', ('lat', 'lon', 'time',), zlib=True)
+        headid.units = 'degrees'
+        headid.epic_code = 1215
+        headid.setncattr('name', 'Hdg')
+        headid.long_name = 'INST Heading'
+        headid.generic_name = 'hdg'
+        # AGCid.sensor_type = INST_TYPE # FIXME
+        headid.minimum = 0
+        headid.maximum = 0 # TODO: why are min/max different (0 vs aqdlib.DOUBLE_FILL for others?)
+        # netcdf.putAtt(ncid,headid,'sensor_type',metadata.cdfmeta.INST_TYPE); #FIXME
+        # netcdf.putAtt(ncid,headid,'serial_number',metadata.cdfmeta.AQDSerial_Number); #FIXME
+        headid.initial_instrument_height = metadata['initial_instrument_height']
+        headid.height_depth_units = 'm'
+        headid.nominal_instrument_depth = metadata['nominal_instrument_depth']
+        if 'magnetic_variation_at_site' in metadata:
+            headid.note = 'Heading is degrees true. Converted from magnetic with magnetic variation of ' + str(metadata['magnetic_variation_at_site'])
+        elif 'magnetic_variation' in metadata:
+            headid.note = 'Heading is degrees true. Converted from magnetic with magnetic variation of ' + str(metadata['magnetic_variation'])
+
+        ptchid = rg.createVariable('Ptch_1216', 'f', ('lat', 'lon', 'time',), zlib=True)
+        ptchid.units = 'degrees'
+        ptchid.epic_code = 1216
+        ptchid.setncattr('name', 'Ptch')
+        ptchid.long_name = 'INST Pitch'
+        ptchid.generic_name = 'ptch'
+        # AGCid.sensor_type = INST_TYPE # FIXME
+        ptchid.minimum = 0
+        ptchid.maximum = 0 # TODO: why are min/max different (0 vs aqdlib.DOUBLE_FILL for others?)
+        # netcdf.putAtt(ncid,headid,'sensor_type',metadata.cdfmeta.INST_TYPE); #FIXME
+        # netcdf.putAtt(ncid,headid,'serial_number',metadata.cdfmeta.AQDSerial_Number); #FIXME
+        ptchid.initial_instrument_height = metadata['initial_instrument_height']
+        ptchid.height_depth_units = 'm' # TODO: Why is this in the pitch metadata?
+        ptchid.nominal_instrument_depth = metadata['nominal_instrument_depth']
+
+        rollid = rg.createVariable('Roll_1217', 'f', ('lat', 'lon', 'time',), zlib=True)
+        rollid.units = 'degrees'
+        rollid.epic_code = 1217
+        rollid.setncattr('name', 'Roll')
+        rollid.long_name = 'INST Roll'
+        rollid.generic_name = 'roll'
+        # AGCid.sensor_type = INST_TYPE # FIXME
+        # netcdf.putAtt(ncid,rollid,'sensor_type',metadata.cdfmeta.INST_TYPE); $ FIXME
+        rollid.minimum = 0
+        rollid.maximum = 0 # TODO: why are min/max different (0 vs aqdlib.DOUBLE_FILL for others?)
+        # netcdf.putAtt(ncid,headid,'sensor_type',metadata.cdfmeta.INST_TYPE); #FIXME
+        # netcdf.putAtt(ncid,headid,'serial_number',metadata.cdfmeta.AQDSerial_Number); #FIXME
+        rollid.initial_instrument_height = metadata['initial_instrument_height']
+        rollid.height_depth_units = 'm' # TODO: Why is this in the pitch metadata?
+        rollid.nominal_instrument_depth = metadata['nominal_instrument_depth']
 
         # TODO: add analog input variables (OBS, NTU, etc)
 
@@ -235,7 +296,7 @@ def define_aqd_nc_file(nc_filename, VEL, metadata):
         bdepid.setncattr('name', 'bin depth')
         bdepid.units = 'm'
         bdepid.initial_instrument_height = metadata['initial_instrument_height']
-        bdepid.minimum = 0 # why 0 instead of double_fill??
+        bdepid.minimum = 0 # why 0 instead of aqdlib.DOUBLE_FILL??
         bdepid.maximum = 0
         if 'press_ac' in VEL:
             bdepid.note = 'Actual depth time series of velocity bins. Calculated as corrected pressure(P_1ac) - bindist.'
@@ -247,8 +308,8 @@ def define_aqd_nc_file(nc_filename, VEL, metadata):
             ACPressid.units = 'dbar'
             ACPressid.setncattr('name', 'Pac') # TODO: is Pac correct?
             ACPressid.long_name = 'CORRECTED PRESSURE (DB)'
-            ACPressid.minimum = DOUBLE_FILL # why double_fill??
-            ACPressid.maximum = DOUBLE_FILL
+            ACPressid.minimum = aqdlib.DOUBLE_FILL # why aqdlib.DOUBLE_FILL??
+            ACPressid.maximum = aqdlib.DOUBLE_FILL
             # netcdf.putAtt(ncid,CPressid,'serial_number',metadata.cdfmeta.AQDSerial_Number); # FIXME
             ACPressid.initial_instrument_height = metadata['initial_instrument_height']
             ACPressid.nominal_instrument_depth = metadata['nominal_instrument_depth']
@@ -262,12 +323,13 @@ def write_aqd_nc_file(nc_filename, VEL, metadata):
     try:
         N, M = np.shape(VEL['U'])
         print('N:', N, 'M:', M, 'in write_aqd_nc_file')
-        rg = Dataset('/Volumes/Backstaff/field/gb_proc/1076a/1076a1aqd/' + nc_filename, 'r+')
+        rg = Dataset(nc_filename, 'r+')
 
         rg['lat'][:] = metadata['latitude']
         rg['lon'][:] = metadata['longitude']
         rg['time'][:] = VEL['time']
         rg['time2'][:] = VEL['time2']
+        rg['depth'][:] = VEL['depths']
 
         rg['bindist'][:] = VEL['bindist']
         rg['bin_depth'][:] = np.reshape(VEL['bin_depth'].T, (M, 1, 1, N))
@@ -276,12 +338,15 @@ def write_aqd_nc_file(nc_filename, VEL, metadata):
         rg['w_1204'][:] = np.reshape(VEL['W'].T, (M, 1, 1, N))
         rg['AGC_1202'][:] = np.reshape(VEL['AGC'].T, (M, 1, 1, N))
 
+        rg['Tx_1211'][:] = VEL['temp'][np.newaxis, np.newaxis, :]
         rg['P_1'][:] = VEL['pressure'][np.newaxis, np.newaxis, :]
 
         if 'press_ac' in VEL:
             rg['P_1ac'][:] = VEL['press_ac'][np.newaxis, np.newaxis, :]
 
-        rg['Tx_1211'][:] = VEL['temp'][np.newaxis, np.newaxis, :]
+        rg['Ptch_1216'][:] = VEL['pitch'][np.newaxis, np.newaxis, :]
+        rg['Roll_1217'][:] = VEL['roll'][np.newaxis, np.newaxis, :]
+        rg['Hdg_1215'][:] = VEL['heading'][np.newaxis, np.newaxis, :]
 
     finally:
         print('Done writing NetCDF file')

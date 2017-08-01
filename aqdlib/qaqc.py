@@ -44,10 +44,14 @@ def atmcomp(aqddatetime, aqdpress, metdatetime, metpress, offset=0):
 
     return aqdpress_ac
 
-def plot_atmcomp(aqddatetime, aqdpress, aqdpress_ac):
-    plt.figure()
+def plot_atmcomp(aqddatetime, aqdpress, aqdpress_ac, xlims=False, ylims=False):
+    plt.figure(figsize=(12,8))
     plt.plot(aqddatetime, aqdpress)
     plt.plot(aqddatetime, aqdpress_ac)
+    if xlims is not False:
+        plt.xlim(xlims)
+    if ylims is not False:
+        plt.ylim(ylims)
     plt.show()
 
 def coord_transform(vel1, vel2, vel3, heading, pitch, roll, T, cs):
@@ -97,25 +101,30 @@ def coord_transform(vel1, vel2, vel3, heading, pitch, roll, T, cs):
 
     return u, v, w
 
-def set_orientation(VEL, T, metadata):
+def set_orientation(VEL, T, metadata, INFO):
     # TODO: this code seems too complicated. also should we really be modifying the trans matrix?
     # TODO: deal with atmos pressure
+
+    print(INFO)
 
     N, M = np.shape(VEL['U'])
 
     if 'press_ac' in VEL:
-        Wdepth = np.nanmean(VEL['press_ac']) + metadata['transducer_offset_from_bottom']
+        Wdepth = np.nanmean(VEL['press_ac']) + INFO['transducer_offset_from_bottom']
     else:
-        Wdepth = np.nanmean(VEL['pressure']) + metadata['transducer_offset_from_bottom']
+        Wdepth = np.nanmean(VEL['pressure']) + INFO['transducer_offset_from_bottom']
 
-    blank2 = metadata['blanking_distance'] + metadata['transducer_offset_from_bottom']
-    binn = metadata['bin_size']
-    blank3 = metadata['transducer_offset_from_bottom'] - metadata['blanking_distance']
+    blank2 = INFO['AQDBlankingDistance'] + INFO['transducer_offset_from_bottom']
+    binn = INFO['bin_size']
+    blank3 = INFO['transducer_offset_from_bottom'] - INFO['AQDBlankingDistance']
 
-    if metadata['orientation'] == 'UP':
+    # print(Wdepth, binn, blank2)
+
+    if INFO['orientation'] == 'UP':
         print('User instructed that instrument was pointing UP')
-        VEL['depths'] = np.arange(Wdepth - binn * (M - 1) + blank2 + binn, Wdepth - (blank2 + binn), binn)
-    elif metadata['orientation'] == 'DOWN':
+        VEL['depths'] = np.flipud(np.arange(Wdepth - (binn * (M - 1) + blank2 + binn), Wdepth - (blank2 + binn), binn)) # need to use flipud because 1d array
+        # print(VEL['depths'])
+    elif INFO['orientation'] == 'DOWN':
         print('User instructed that instrument was pointing DOWN')
         T[1,:] = -T[1,:]
         T[2,:] = -T[2,:]
@@ -190,7 +199,7 @@ def create_water_depth(VEL, metadata):
 
     return VEL, metadata
 
-def trim_vel(VEL, metadata):
+def trim_vel(VEL, metadata, INFO):
     N, M = np.shape(VEL['U'])
 
     # TODO: need to account for press_ac
@@ -205,8 +214,8 @@ def trim_vel(VEL, metadata):
         WL = VEL['pressure'] + metadata['transducer_offset_from_bottom']
 
     if 'trim_method' in metadata:
-        blank = metadata['blanking_distance'] + metadata['transducer_offset_from_bottom'] # TODO: check this logic
-        binn = metadata['bin_size']
+        blank = INFO['AQDBlankingDistance'] + metadata['transducer_offset_from_bottom'] # TODO: check this logic
+        binn = INFO['bin_size']
         if metadata['trim_method'].lower() == 'water level' or metadata['trim_method'].lower() == 'water level sl':
             print('User instructed to trim data at the surface using pressure data')
             if metadata['trim_method'].lower() == 'water level':
