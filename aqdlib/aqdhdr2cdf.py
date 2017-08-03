@@ -57,7 +57,8 @@ def prf_to_cdf(basefile, metadata):
     write_aqd_cdf_data(cdf_filename, RAW, metadata)
     print('Variables written')
 
-    add_min_max(cdf_filename)
+    qaqc.add_min_max(cdf_filename)
+    print('Adding min/max values')
 
     print('Finished writing data to %s' % cdf_filename)
 
@@ -132,23 +133,6 @@ def check_metadata(metadata, instmeta):
     metadata['INST_TYPE'] = 'Nortek Aquadopp Profiler';
 
     return metadata
-
-def add_min_max(cdf_filename):
-    """
-    Add minimum and maximum values to variables in CDF file
-    """
-    try:
-        rg = Dataset(cdf_filename, 'r+')
-        exclude = rg.dimensions.keys()
-        exclude.extend(('time2', 'TransMatrix'))
-        for var in rg.variables:
-            if var not in exclude:
-                rg[var].minimum = rg[var][:].min()
-                rg[var].maximum = rg[var][:].max()
-        print("Assigned min and max values")
-
-    finally:
-        rg.close()
 
 def write_aqd_cdf_data(cdf_filename, RAW, metadata):
     """

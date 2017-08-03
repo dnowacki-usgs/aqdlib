@@ -20,6 +20,15 @@ def cdf_to_nc(cdf_filename, metadata, p_1ac=False):
 
     write_aqd_nc_file(nc_filename, VEL, metadata)
 
+    qaqc.add_min_max(nc_filename)
+    print('Added min/max values')
+
+    # _FillValue is set in createVariable, not after the fact like in Matlab
+    # qaqc.add_fill_values(nc_filename)
+    # print('Assigned _FillValue')
+
+    print('Done writing NetCDF file', nc_filename)
+
     return VEL
 
 def load_cdf_amp_vel(cdf_filename, VEL, metadata, p_1ac=False):
@@ -118,7 +127,7 @@ def load_cdf_amp_vel(cdf_filename, VEL, metadata, p_1ac=False):
         rg.close()
 
 
-
+# TODO: these are doubles, but in hdr2cdf they are float (single)
 def define_aqd_nc_file(nc_filename, VEL, metadata, INFO):
     try:
         N, M = np.shape(VEL['U'])
@@ -142,24 +151,24 @@ def define_aqd_nc_file(nc_filename, VEL, metadata, INFO):
         time2id.type ='EVEN'
         time2id.epic_code = 624
 
-        latid = rg.createVariable('lat', 'f', ('lat',), zlib=True)
+        latid = rg.createVariable('lat', 'd', ('lat',), zlib=True)
         latid.units = 'degree_north'
         latid.epic_code = 500
 
-        lonid = rg.createVariable('lon', 'f', ('lon',), zlib=True)
+        lonid = rg.createVariable('lon', 'd', ('lon',), zlib=True)
         lonid.FORTRAN_format = 'F10.4' # TODO: Why is there a FORTRAN_format on here but not the others?????
         lonid.units = 'degree_east'
         lonid.epic_code = 502
         # TODO: why is the setup of these variables different from the setup in the CDF routines?
 
-        depthid = rg.createVariable('depth', 'f', ('depth',), zlib=True)
+        depthid = rg.createVariable('depth', 'd', ('depth',), zlib=True)
         depthid.units = 'm'
         depthid.epic_code = 3
         depthid.long_name = 'mean water depth'
         depthid.initial_instrument_height = metadata['initial_instrument_height']
         # depthid.nominal_instrument_depth = metadata['nominal_instrument_depth'] # FIXME
 
-        bindistid = rg.createVariable('bindist', 'f', ('depth',))
+        bindistid = rg.createVariable('bindist', 'd', ('depth',), zlib=True, fill_value=aqdlib.DOUBLE_FILL)
         # TODO: Loop through the attribute names and values as done in Matlab
         bindistid.blanking_distance = INFO['AQDBlankingDistance']
         bindistid.initial_instrument_height = metadata['initial_instrument_height']
@@ -179,28 +188,28 @@ def define_aqd_nc_file(nc_filename, VEL, metadata, INFO):
             if 'trim_method' in metadata and metadata['trim_method'].lower() == 'water level sl':
                 vel.note ='Velocity bins trimmed if out of water or if side lobes intersect sea surface'
 
-        u_1205 = rg.createVariable('u_1205', 'f', ('depth', 'lat', 'lon', 'time',), zlib=True)
+        u_1205 = rg.createVariable('u_1205', 'd', ('depth', 'lat', 'lon', 'time',), zlib=True, fill_value=aqdlib.DOUBLE_FILL)
         u_1205.setncattr('name', 'u')
         u_1205.long_name = 'Eastward Velocity'
         u_1205.generic_name = 'u'
         u_1205.epic_code = 1205
         add_vel_attributes(u_1205, metadata, INFO)
 
-        v_1206 = rg.createVariable('v_1206', 'f', ('depth', 'lat', 'lon', 'time',), zlib=True)
+        v_1206 = rg.createVariable('v_1206', 'd', ('depth', 'lat', 'lon', 'time',), zlib=True, fill_value=aqdlib.DOUBLE_FILL)
         v_1206.setncattr('name', 'v')
         v_1206.long_name = 'Northward Velocity'
         v_1206.generic_name = 'v'
         v_1206.epic_code = 1206
         add_vel_attributes(v_1206, metadata, INFO)
 
-        w_1204 = rg.createVariable('w_1204', 'f', ('depth', 'lat', 'lon', 'time',), zlib=True)
+        w_1204 = rg.createVariable('w_1204', 'd', ('depth', 'lat', 'lon', 'time',), zlib=True, fill_value=aqdlib.DOUBLE_FILL)
         w_1204.setncattr('name', 'w')
         w_1204.long_name = 'Vertical Velocity'
         w_1204.generic_name = 'w'
         w_1204.epic_code = 1204
         add_vel_attributes(w_1204, metadata, INFO)
 
-        Pressid = rg.createVariable('P_1', 'f', ('lat', 'lon', 'time',), zlib=True)
+        Pressid = rg.createVariable('P_1', 'd', ('lat', 'lon', 'time',), zlib=True, fill_value=aqdlib.DOUBLE_FILL)
         Pressid.units = 'dbar'
         Pressid.epic_code = 1
         Pressid.setncattr('name', 'P')
@@ -208,11 +217,13 @@ def define_aqd_nc_file(nc_filename, VEL, metadata, INFO):
         Pressid.generic_name = 'depth'
         Pressid.minimum = aqdlib.DOUBLE_FILL
         Pressid.maximum = aqdlib.DOUBLE_FILL
-        # netcdf.putAtt(ncid,Pressid,'serial_number',metadata.cdfmeta.AQDSerial_Number); #FIXME
+        Pressid.serial_number = INFO['AQDSerial_Number']
         Pressid.initial_instrument_height = metadata['initial_instrument_height']
         Pressid.nominal_instrument_depth = metadata['nominal_instrument_depth']
+        # TODO: why is there no height_depth_units?
+        # why no sensor_type in these vars?
 
-        Tempid = rg.createVariable('Tx_1211', 'f', ('lat', 'lon', 'time',), zlib=True)
+        Tempid = rg.createVariable('Tx_1211', 'd', ('lat', 'lon', 'time',), zlib=True, fill_value=aqdlib.DOUBLE_FILL)
         Tempid.units = 'C'
         Tempid.epic_code = 1211
         Tempid.setncattr('name', 'Tx')
@@ -220,27 +231,25 @@ def define_aqd_nc_file(nc_filename, VEL, metadata, INFO):
         Tempid.generic_name = 'temp'
         Tempid.minimum = aqdlib.DOUBLE_FILL
         Tempid.maximum = aqdlib.DOUBLE_FILL
-        # netcdf.putAtt(ncid,Pressid,'serial_number',metadata.cdfmeta.AQDSerial_Number); #FIXME
+        Tempid.serial_number = INFO['AQDSerial_Number']
         Tempid.initial_instrument_height = metadata['initial_instrument_height']
         Tempid.nominal_instrument_depth = metadata['nominal_instrument_depth']
 
-        AGCid = rg.createVariable('AGC_1202', 'f', ('depth', 'lat', 'lon', 'time',), zlib=True)
+        AGCid = rg.createVariable('AGC_1202', 'd', ('depth', 'lat', 'lon', 'time',), zlib=True, fill_value=aqdlib.DOUBLE_FILL)
         AGCid.units = 'counts'
         AGCid.epic_code = 1202
         AGCid.setncattr('name', 'AGC')
         AGCid.long_name = 'Average Echo Intensity (AGC)'
         AGCid.generic_name = 'AGC'
-        # AGCid.sensor_type = INST_TYPE # FIXME
         AGCid.minimum = 0
         AGCid.maximum = 0 # TODO: why are min/max different (0 vs aqdlib.DOUBLE_FILL for others?)
-        # netcdf.putAtt(ncid,AGCid,'sensor_type',metadata.cdfmeta.INST_TYPE); #FIXME
-        # netcdf.putAtt(ncid,Pressid,'serial_number',metadata.cdfmeta.AQDSerial_Number); #FIXME
+        AGCid.sensor_type = INFO['INST_TYPE']
+        AGCid.serial_number = INFO['AQDSerial_Number']
         AGCid.initial_instrument_height = metadata['initial_instrument_height']
         AGCid.height_depth_units = 'm'
         AGCid.nominal_instrument_depth = metadata['nominal_instrument_depth']
 
-
-        headid = rg.createVariable('Hdg_1215', 'f', ('lat', 'lon', 'time',), zlib=True)
+        headid = rg.createVariable('Hdg_1215', 'd', ('lat', 'lon', 'time',), zlib=True, fill_value=aqdlib.DOUBLE_FILL)
         headid.units = 'degrees'
         headid.epic_code = 1215
         headid.setncattr('name', 'Hdg')
@@ -249,8 +258,8 @@ def define_aqd_nc_file(nc_filename, VEL, metadata, INFO):
         # AGCid.sensor_type = INST_TYPE # FIXME
         headid.minimum = 0
         headid.maximum = 0 # TODO: why are min/max different (0 vs aqdlib.DOUBLE_FILL for others?)
-        # netcdf.putAtt(ncid,headid,'sensor_type',metadata.cdfmeta.INST_TYPE); #FIXME
-        # netcdf.putAtt(ncid,headid,'serial_number',metadata.cdfmeta.AQDSerial_Number); #FIXME
+        headid.sensor_type = INFO['INST_TYPE']
+        headid.serial_number = INFO['AQDSerial_Number']
         headid.initial_instrument_height = metadata['initial_instrument_height']
         headid.height_depth_units = 'm'
         headid.nominal_instrument_depth = metadata['nominal_instrument_depth']
@@ -259,40 +268,40 @@ def define_aqd_nc_file(nc_filename, VEL, metadata, INFO):
         elif 'magnetic_variation' in metadata:
             headid.note = 'Heading is degrees true. Converted from magnetic with magnetic variation of ' + str(metadata['magnetic_variation'])
 
-        ptchid = rg.createVariable('Ptch_1216', 'f', ('lat', 'lon', 'time',), zlib=True)
+        ptchid = rg.createVariable('Ptch_1216', 'd', ('lat', 'lon', 'time',), zlib=True, fill_value=aqdlib.DOUBLE_FILL)
         ptchid.units = 'degrees'
         ptchid.epic_code = 1216
         ptchid.setncattr('name', 'Ptch')
         ptchid.long_name = 'INST Pitch'
         ptchid.generic_name = 'ptch'
-        # AGCid.sensor_type = INST_TYPE # FIXME
+        ptchid.sensor_type = INFO['INST_TYPE']
         ptchid.minimum = 0
         ptchid.maximum = 0 # TODO: why are min/max different (0 vs aqdlib.DOUBLE_FILL for others?)
         # netcdf.putAtt(ncid,headid,'sensor_type',metadata.cdfmeta.INST_TYPE); #FIXME
-        # netcdf.putAtt(ncid,headid,'serial_number',metadata.cdfmeta.AQDSerial_Number); #FIXME
+        ptchid.serial_number = INFO['AQDSerial_Number']
         ptchid.initial_instrument_height = metadata['initial_instrument_height']
         ptchid.height_depth_units = 'm' # TODO: Why is this in the pitch metadata?
         ptchid.nominal_instrument_depth = metadata['nominal_instrument_depth']
 
-        rollid = rg.createVariable('Roll_1217', 'f', ('lat', 'lon', 'time',), zlib=True)
+        rollid = rg.createVariable('Roll_1217', 'd', ('lat', 'lon', 'time',), zlib=True, fill_value=aqdlib.DOUBLE_FILL)
         rollid.units = 'degrees'
         rollid.epic_code = 1217
         rollid.setncattr('name', 'Roll')
         rollid.long_name = 'INST Roll'
         rollid.generic_name = 'roll'
-        # AGCid.sensor_type = INST_TYPE # FIXME
+        rollid.sensor_type = INFO['INST_TYPE']
         # netcdf.putAtt(ncid,rollid,'sensor_type',metadata.cdfmeta.INST_TYPE); $ FIXME
         rollid.minimum = 0
         rollid.maximum = 0 # TODO: why are min/max different (0 vs aqdlib.DOUBLE_FILL for others?)
         # netcdf.putAtt(ncid,headid,'sensor_type',metadata.cdfmeta.INST_TYPE); #FIXME
-        # netcdf.putAtt(ncid,headid,'serial_number',metadata.cdfmeta.AQDSerial_Number); #FIXME
+        rollid.serial_number = INFO['AQDSerial_Number']
         rollid.initial_instrument_height = metadata['initial_instrument_height']
         rollid.height_depth_units = 'm' # TODO: Why is this in the pitch metadata?
         rollid.nominal_instrument_depth = metadata['nominal_instrument_depth']
 
         # TODO: add analog input variables (OBS, NTU, etc)
 
-        bdepid = rg.createVariable('bin_depth', 'f', ('depth', 'lat', 'lon', 'time',), zlib=True)
+        bdepid = rg.createVariable('bin_depth', 'd', ('depth', 'lat', 'lon', 'time',), zlib=True, fill_value=aqdlib.DOUBLE_FILL)
         bdepid.setncattr('name', 'bin depth')
         bdepid.units = 'm'
         bdepid.initial_instrument_height = metadata['initial_instrument_height']
@@ -304,13 +313,13 @@ def define_aqd_nc_file(nc_filename, VEL, metadata, INFO):
             bdepid.note = 'Actual depth time series of velocity bins. Calculated as pressure(P_1) - bindist.'
 
         if 'press_ac' in VEL:
-            ACPressid = rg.createVariable('P_1ac', 'f', ('lat', 'lon', 'time',), zlib=True)
+            ACPressid = rg.createVariable('P_1ac', 'd', ('lat', 'lon', 'time',), zlib=True, fill_value=aqdlib.DOUBLE_FILL)
             ACPressid.units = 'dbar'
             ACPressid.setncattr('name', 'Pac') # TODO: is Pac correct?
             ACPressid.long_name = 'CORRECTED PRESSURE (DB)'
             ACPressid.minimum = aqdlib.DOUBLE_FILL # why aqdlib.DOUBLE_FILL??
             ACPressid.maximum = aqdlib.DOUBLE_FILL
-            # netcdf.putAtt(ncid,CPressid,'serial_number',metadata.cdfmeta.AQDSerial_Number); # FIXME
+            ACPressid.serial_number = INFO['AQDSerial_Number']
             ACPressid.initial_instrument_height = metadata['initial_instrument_height']
             ACPressid.nominal_instrument_depth = metadata['nominal_instrument_depth']
             ACPressid.note = 'Corrected for variations in atmospheric pressure using nearby MET station'
@@ -349,5 +358,4 @@ def write_aqd_nc_file(nc_filename, VEL, metadata):
         rg['Hdg_1215'][:] = VEL['heading'][np.newaxis, np.newaxis, :]
 
     finally:
-        print('Done writing NetCDF file')
         rg.close()

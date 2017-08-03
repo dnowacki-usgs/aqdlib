@@ -5,6 +5,41 @@ from dateutil import parser
 import pytz
 import calendar
 import jdcal
+import netCDF4 as nc
+import aqdlib
+
+def add_min_max(cdf_filename):
+    """
+    Add minimum and maximum values to variables in NC or CDF files
+    """
+    try:
+        rg = nc.Dataset(cdf_filename, 'r+')
+        exclude = rg.dimensions.keys()
+        exclude.extend(('time2', 'TIM'))
+        for var in rg.variables:
+            if var not in exclude:
+                rg[var].minimum = np.nanmin(rg[var][:])
+                rg[var].maximum = np.nanmax(rg[var][:])
+
+    finally:
+        rg.close()
+
+def add_fill_values(cdf_filename):
+    """
+    Assign _FillValue to each variable
+    """
+    try:
+        rg = nc.Dataset(cdf_filename, 'r+')
+        exclude = rg.dimensions.keys()
+        exclude.extend(('time2', 'TIM'))
+        for var in rg.variables:
+            if var not in exclude:
+                print(var, rg[var].dtype)
+                if rg[var].dtype == 'float32':
+                    rg[var]._FillValue = aqdlib.DOUBLE_FILL
+
+    finally:
+        rg.close()
 
 def plot_inwater(RAW, inwater_time, outwater_time):
     plt.figure(figsize=(12,8))
@@ -223,7 +258,7 @@ def trim_vel(VEL, metadata, INFO):
 
             d2 = np.tile(dist2, (np.shape(WL)[0], 1))
             WL2 = np.tile(WL, (np.shape(d2)[1], 1)).T
-            
+
             print('new D2')
             if metadata['trim_method'].lower() == 'water level':
                 bads = d2 >= WL2
