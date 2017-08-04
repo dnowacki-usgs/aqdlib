@@ -201,19 +201,16 @@ def define_aqd_cdf_file(cdf_filename, RAW, metadata):
         Tmatrix = rg.createDimension('Tmatrix', 3)
 
         timeid = rg.createVariable('time', 'i', ('time',), fill_value=False) # 'i' == NC_INT
-        timeid.FORTRAN_format = 'F10.2'
         timeid.units = 'True Julian Day'
         timeid.type = 'UNEVEN'
         timeid.epic_code = 624
 
         time2id = rg.createVariable('time2', 'i', ('time',), fill_value=False) # 'i' == NC_INT
-        time2id.FORTRAN_format = 'F10.2'
         time2id.units = 'msec since 0:00 GMT'
         time2id.type ='UNEVEN'
         time2id.epic_code = 624
 
         latid = rg.createVariable('lat', 'f', ('lat',), fill_value=False)
-        latid.FORTRAN_format = 'F10.4'
         latid.units = 'degree_north'
         latid.type = 'EVEN'
         latid.epic_code = 500
@@ -221,7 +218,6 @@ def define_aqd_cdf_file(cdf_filename, RAW, metadata):
         latid.maximum = aqdlib.DOUBLE_FILL
 
         lonid = rg.createVariable('lon', 'f', ('lon',), fill_value=False)
-        lonid.FORTRAN_format = 'F10.4'
         lonid.units = 'degree_east'
         lonid.type = 'EVEN'
         lonid.epic_code = 502

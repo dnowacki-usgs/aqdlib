@@ -156,7 +156,6 @@ def define_aqd_nc_file(nc_filename, VEL, metadata, INFO):
         latid.epic_code = 500
 
         lonid = rg.createVariable('lon', 'd', ('lon',), zlib=True)
-        lonid.FORTRAN_format = 'F10.4' # TODO: Why is there a FORTRAN_format on here but not the others?????
         lonid.units = 'degree_east'
         lonid.epic_code = 502
         # TODO: why is the setup of these variables different from the setup in the CDF routines?
