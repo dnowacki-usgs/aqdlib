@@ -29,7 +29,6 @@ def prf_to_cdf(basefile, metadata):
     RAW = load_amp_vel(RAW, basefile)
 
     # Compute time stamps
-    print('about to enter...')
     RAW = compute_time(RAW, instmeta)
 
     # Deal with metadata peculiarities

@@ -101,7 +101,7 @@ def set_orientation(VEL, T, metadata, INFO):
     # TODO: this code seems too complicated. also should we really be modifying the trans matrix?
     # TODO: deal with atmos pressure
 
-    print(INFO)
+    # print(INFO)
 
     N, M = np.shape(VEL['U'])
 
