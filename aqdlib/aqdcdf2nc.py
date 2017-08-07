@@ -23,10 +23,6 @@ def cdf_to_nc(cdf_filename, metadata, p_1ac=False):
     qaqc.add_min_max(nc_filename)
     print('Added min/max values')
 
-    # _FillValue is set in createVariable, not after the fact like in Matlab
-    # qaqc.add_fill_values(nc_filename)
-    # print('Assigned _FillValue')
-
     print('Done writing NetCDF file', nc_filename)
 
     return VEL
