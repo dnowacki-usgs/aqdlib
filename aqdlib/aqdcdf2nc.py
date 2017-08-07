@@ -126,8 +126,6 @@ def load_cdf_amp_vel(cdf_filename, VEL, metadata, p_1ac=False):
     finally:
         rg.close()
 
-
-# TODO: these are doubles, but in hdr2cdf they are float (single)
 def define_aqd_nc_file(nc_filename, VEL, metadata, INFO):
     try:
         N, M = np.shape(VEL['U'])
@@ -176,16 +174,19 @@ def define_aqd_nc_file(nc_filename, VEL, metadata, INFO):
         # put in attributes common to all velocity components
         def add_vel_attributes(vel, metadata, INFO):
             vel.units = 'cm/s'
-            vel.sensor_type = INFO['INST_TYPE']
-            vel.initial_instrument_height = metadata['initial_instrument_height']
-            vel.nominal_instrument_depth = metadata['nominal_instrument_depth']
-            vel.serial_number = INFO['serial_number']
             vel.maximum = 0
             vel.minimum = 0
-            vel.height_depth_units = 'm'
+            add_more_attriutes(var, metadata, INFO)
             # TODO: why do we only do trim_method for Water Level SL?
             if 'trim_method' in metadata and metadata['trim_method'].lower() == 'water level sl':
                 vel.note ='Velocity bins trimmed if out of water or if side lobes intersect sea surface'
+
+        def add_more_attributes(var, metadata, INFO):
+            var.serial_number = INFO['AQDSerial_Number']
+            var.initial_instrument_height = metadata['initial_instrument_height']
+            var.nominal_instrument_depth = metadata['nominal_instrument_depth']
+            var.height_depth_units = 'm'
+            var.sensor_type = INFO['INST_TYPE']
 
         u_1205 = rg.createVariable('u_1205', 'd', ('depth', 'lat', 'lon', 'time',), zlib=True, fill_value=aqdlib.DOUBLE_FILL)
         u_1205.setncattr('name', 'u')
@@ -216,11 +217,8 @@ def define_aqd_nc_file(nc_filename, VEL, metadata, INFO):
         Pressid.generic_name = 'depth'
         Pressid.minimum = aqdlib.DOUBLE_FILL
         Pressid.maximum = aqdlib.DOUBLE_FILL
-        Pressid.serial_number = INFO['AQDSerial_Number']
-        Pressid.initial_instrument_height = metadata['initial_instrument_height']
-        Pressid.nominal_instrument_depth = metadata['nominal_instrument_depth']
-        # TODO: why is there no height_depth_units?
-        # why no sensor_type in these vars?
+        add_more_attributes(Pressid, metadata, INFO)
+        # TODO: why no sensor_type in these vars?
 
         Tempid = rg.createVariable('Tx_1211', 'd', ('lat', 'lon', 'time',), zlib=True, fill_value=aqdlib.DOUBLE_FILL)
         Tempid.units = 'C'
@@ -230,9 +228,7 @@ def define_aqd_nc_file(nc_filename, VEL, metadata, INFO):
         Tempid.generic_name = 'temp'
         Tempid.minimum = aqdlib.DOUBLE_FILL
         Tempid.maximum = aqdlib.DOUBLE_FILL
-        Tempid.serial_number = INFO['AQDSerial_Number']
-        Tempid.initial_instrument_height = metadata['initial_instrument_height']
-        Tempid.nominal_instrument_depth = metadata['nominal_instrument_depth']
+        add_more_attributes(Tempid, metadata, INFO)
 
         AGCid = rg.createVariable('AGC_1202', 'd', ('depth', 'lat', 'lon', 'time',), zlib=True, fill_value=aqdlib.DOUBLE_FILL)
         AGCid.units = 'counts'
@@ -243,10 +239,7 @@ def define_aqd_nc_file(nc_filename, VEL, metadata, INFO):
         AGCid.minimum = 0
         AGCid.maximum = 0 # TODO: why are min/max different (0 vs aqdlib.DOUBLE_FILL for others?)
         AGCid.sensor_type = INFO['INST_TYPE']
-        AGCid.serial_number = INFO['AQDSerial_Number']
-        AGCid.initial_instrument_height = metadata['initial_instrument_height']
-        AGCid.height_depth_units = 'm'
-        AGCid.nominal_instrument_depth = metadata['nominal_instrument_depth']
+        add_more_attributes(AGCid, metadata, INFO)
 
         headid = rg.createVariable('Hdg_1215', 'd', ('lat', 'lon', 'time',), zlib=True, fill_value=aqdlib.DOUBLE_FILL)
         headid.units = 'degrees'
@@ -258,10 +251,7 @@ def define_aqd_nc_file(nc_filename, VEL, metadata, INFO):
         headid.minimum = 0
         headid.maximum = 0 # TODO: why are min/max different (0 vs aqdlib.DOUBLE_FILL for others?)
         headid.sensor_type = INFO['INST_TYPE']
-        headid.serial_number = INFO['AQDSerial_Number']
-        headid.initial_instrument_height = metadata['initial_instrument_height']
-        headid.height_depth_units = 'm'
-        headid.nominal_instrument_depth = metadata['nominal_instrument_depth']
+        add_more_attributes(headid, metadata, INFO)
         if 'magnetic_variation_at_site' in metadata:
             headid.note = 'Heading is degrees true. Converted from magnetic with magnetic variation of ' + str(metadata['magnetic_variation_at_site'])
         elif 'magnetic_variation' in metadata:
@@ -277,10 +267,7 @@ def define_aqd_nc_file(nc_filename, VEL, metadata, INFO):
         ptchid.minimum = 0
         ptchid.maximum = 0 # TODO: why are min/max different (0 vs aqdlib.DOUBLE_FILL for others?)
         # netcdf.putAtt(ncid,headid,'sensor_type',metadata.cdfmeta.INST_TYPE); #FIXME
-        ptchid.serial_number = INFO['AQDSerial_Number']
-        ptchid.initial_instrument_height = metadata['initial_instrument_height']
-        ptchid.height_depth_units = 'm' # TODO: Why is this in the pitch metadata?
-        ptchid.nominal_instrument_depth = metadata['nominal_instrument_depth']
+        add_more_attributes(ptchid, metadata, INFO)
 
         rollid = rg.createVariable('Roll_1217', 'd', ('lat', 'lon', 'time',), zlib=True, fill_value=aqdlib.DOUBLE_FILL)
         rollid.units = 'degrees'
@@ -288,15 +275,11 @@ def define_aqd_nc_file(nc_filename, VEL, metadata, INFO):
         rollid.setncattr('name', 'Roll')
         rollid.long_name = 'INST Roll'
         rollid.generic_name = 'roll'
-        rollid.sensor_type = INFO['INST_TYPE']
         # netcdf.putAtt(ncid,rollid,'sensor_type',metadata.cdfmeta.INST_TYPE); $ FIXME
         rollid.minimum = 0
         rollid.maximum = 0 # TODO: why are min/max different (0 vs aqdlib.DOUBLE_FILL for others?)
         # netcdf.putAtt(ncid,headid,'sensor_type',metadata.cdfmeta.INST_TYPE); #FIXME
-        rollid.serial_number = INFO['AQDSerial_Number']
-        rollid.initial_instrument_height = metadata['initial_instrument_height']
-        rollid.height_depth_units = 'm' # TODO: Why is this in the pitch metadata?
-        rollid.nominal_instrument_depth = metadata['nominal_instrument_depth']
+        add_more_attributes(ptchid, metadata, INFO)
 
         # TODO: add analog input variables (OBS, NTU, etc)
 
@@ -318,9 +301,7 @@ def define_aqd_nc_file(nc_filename, VEL, metadata, INFO):
             ACPressid.long_name = 'CORRECTED PRESSURE (DB)'
             ACPressid.minimum = aqdlib.DOUBLE_FILL # why aqdlib.DOUBLE_FILL??
             ACPressid.maximum = aqdlib.DOUBLE_FILL
-            ACPressid.serial_number = INFO['AQDSerial_Number']
-            ACPressid.initial_instrument_height = metadata['initial_instrument_height']
-            ACPressid.nominal_instrument_depth = metadata['nominal_instrument_depth']
+            add_more_attributes(ACPressid, metadata, INFO)
             ACPressid.note = 'Corrected for variations in atmospheric pressure using nearby MET station'
 
     finally:
