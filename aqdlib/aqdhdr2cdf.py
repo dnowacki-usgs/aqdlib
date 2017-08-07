@@ -79,7 +79,9 @@ def check_orientation(RAW, metadata):
     print('bin_size = %f\n' % metadata['bin_size'])
     print('bin_count = %f\n' % metadata['bin_count'])
     # TODO: these values are already in the HDR file...
-    RAW['bindist'] = np.arange(metadata['center_first_bin'], (metadata['center_first_bin']+((metadata['bin_count']-1)*metadata['bin_size'])), metadata['bin_size'])
+    RAW['bindist'] = np.linspace(metadata['center_first_bin'],
+                                 (metadata['center_first_bin'] + ((metadata['bin_count'] - 1) * metadata['bin_size'])),
+                                 num=metadata['bin_count'])
 
     if metadata['orientation'] == 'UP':
         print('User instructed that instrument was pointing UP')
