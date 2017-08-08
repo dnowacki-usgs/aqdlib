@@ -136,18 +136,21 @@ def set_orientation(VEL, T, metadata, INFO):
     blank2 = INFO['AQDBlankingDistance'] + INFO['transducer_offset_from_bottom']
     binn = INFO['bin_size']
     blank3 = INFO['transducer_offset_from_bottom'] - INFO['AQDBlankingDistance']
+    binc = INFO['bin_count']
 
     # print(Wdepth, binn, blank2)
 
     if INFO['orientation'] == 'UP':
         print('User instructed that instrument was pointing UP')
-        VEL['depths'] = np.flipud(np.arange(Wdepth - (binn * (M - 1) + blank2 + binn), Wdepth - (blank2 + binn), binn)) # need to use flipud because 1d array
+        # VEL['depths'] = np.flipud(np.arange(Wdepth - (binn * (M - 1) + blank2 + binn), Wdepth - (blank2 + binn), binn)) # need to use flipud because 1d array
+        VEL['depths'] = np.flipud(np.linspace(Wdepth - (binn * (M - 1) + blank2 + binn), Wdepth - (blank2 + binn), num=binc))
         # print(VEL['depths'])
     elif INFO['orientation'] == 'DOWN':
         print('User instructed that instrument was pointing DOWN')
         T[1,:] = -T[1,:]
         T[2,:] = -T[2,:]
-        VEL['depths'] = np.arange(Wdepth - blank3 + binn, Wdepth - blank3 + binn * M, binn)
+        # VEL['depths'] = np.arange(Wdepth - blank3 + binn, Wdepth - blank3 + binn * M, binn)
+        VEL['depths'] = np.linspace(Wdepth - blank3 + binn, Wdepth - blank3 + binn * M, num=binc)
 
     return VEL, T
 
@@ -230,14 +233,15 @@ def trim_vel(VEL, metadata, INFO):
     if 'trim_method' in metadata:
         blank = INFO['AQDBlankingDistance'] + metadata['transducer_offset_from_bottom'] # TODO: check this logic
         binn = INFO['bin_size']
+        binc = INFO['bin_count']
         if metadata['trim_method'].lower() == 'water level' or metadata['trim_method'].lower() == 'water level sl':
             print('User instructed to trim data at the surface using pressure data')
             if metadata['trim_method'].lower() == 'water level':
                 print('Trimming using water level')
-                dist2 = np.arange(blank + binn/2, (binn * (M-1)) + blank + binn/2, binn) # TODO: This seems kludgey, can we just read from hdr instead?
+                dist2 = np.linspace(blank + binn/2, (binn * (M-1)) + blank + binn/2, num=binc)
             elif metadata['trim_method'].lower() == 'water level sl':
                 print('Trimming using water level and sidelobes')
-                dist2 = np.arange(blank + binn, (binn * (M-1)) + blank + binn, binn) # TODO: This seems kludgey, can we just read from hdr instead?
+                dist2 = np.linspace(blank + binn, (binn * (M-1)) + blank + binn, num=binc)
             # TODO: Why does matlab incorporate cosd of the beam angle??
 
             d2 = np.tile(dist2, (np.shape(WL)[0], 1))
