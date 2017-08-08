@@ -35,7 +35,7 @@ def load_cdf_amp_vel(cdf_filename, VEL, metadata, p_1ac=False):
         INFO = {}
         for k, v in rg.__dict__.iteritems():
             INFO[k] = v
-            print(k, INFO[k])
+            # print(k, INFO[k])
 
         # clip either by ensemble indices or by the deployment and recovery date specified in metadata
         if 'good_ens' in metadata:
@@ -58,12 +58,12 @@ def load_cdf_amp_vel(cdf_filename, VEL, metadata, p_1ac=False):
 
             print('first burst in full file:', times[0])
             print('last burst in full file:', times[-1])
-            print(pytz.utc.localize(dateutil.parser.parse(rg.Deployment_date)))
 
             S = np.argwhere(times > pytz.utc.localize(dateutil.parser.parse(rg.Deployment_date)))[0].item() # .item() to avoid error when indexing
             E = np.argwhere(times > pytz.utc.localize(dateutil.parser.parse(rg.Recovery_date)))[0].item() # do this because of the way python index ranges
-            print (np.argwhere(times <= pytz.utc.localize(dateutil.parser.parse(rg.Recovery_date))))
-            print('times of start and end bursts:', times[S], times[E])
+
+            print('first burst in trimmed file:', times[S])
+            print('last burst in trimmed file:', times[E])
 
         print('Indices of starting and ending bursts: S:', S, 'E:', E)
 

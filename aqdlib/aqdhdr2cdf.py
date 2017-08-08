@@ -73,7 +73,7 @@ def insert_fill_values(RAW):
     return RAW
 
 def check_orientation(RAW, metadata):
-    print(metadata['orientation'])
+    print('Insrument orientation:', metadata['orientation'])
     print('Center_first_bin = %f\n' % metadata['center_first_bin'])
     print('bin_size = %f\n' % metadata['bin_size'])
     print('bin_count = %f\n' % metadata['bin_count'])
@@ -150,7 +150,7 @@ def write_aqd_cdf_data(cdf_filename, RAW, metadata):
         rg['depth'][:] = RAW['Depths']
         rg['bindist'][:] = RAW['bindist']
 
-        print ('rg shape:', np.shape(rg['VEL1'][:]))
+        print('rg shape:', np.shape(rg['VEL1'][:]))
         print('V1 shape:', np.shape(RAW['V1']))
         rg['VEL1'][:] = RAW['V1'].T
         rg['VEL2'][:] = RAW['V2'].T
@@ -369,11 +369,7 @@ def compute_time(RAW, instmeta):
 
     RAW['time'] = np.floor(RAW['jd'])
     # TODO: Hopefully this is correct... roundoff errors on big numbers...
-    print('new datetime comp')
     RAW['time2'] = (RAW['jd'] - np.floor(RAW['jd']))*86400000
-
-    # TODO: start_time and stop_time into metadata
-    # metadata['start_time'] =
 
     return RAW
 

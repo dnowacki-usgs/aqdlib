@@ -220,7 +220,6 @@ def trim_vel(VEL, metadata, INFO):
             d2 = np.tile(dist2, (np.shape(WL)[0], 1))
             WL2 = np.tile(WL, (np.shape(d2)[1], 1)).T
 
-            print('new D2')
             if metadata['trim_method'].lower() == 'water level':
                 bads = d2 >= WL2
             elif metadata['trim_method'].lower() == 'water level sl':
