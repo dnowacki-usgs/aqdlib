@@ -49,12 +49,7 @@ def load_cdf_amp_vel(cdf_filename, VEL, metadata, p_1ac=False):
             time = rg['time'][:]
             time2 = rg['time2'][:]
 
-            times = []
-            for t, t2 in zip(time, time2):
-                year, mon, day, frac = jdcal.jd2gcal(t - 0.5, t2/86400000)
-                hour, minute, second = qaqc.day2hms(frac)
-                times.append(dt.datetime(year, mon, day, hour, minute, second, tzinfo=pytz.utc))
-            times = np.array(times)
+            times = aqdlib.time_time2_to_datetime(time, time2)
 
             print('first burst in full file:', times[0])
             print('last burst in full file:', times[-1])
