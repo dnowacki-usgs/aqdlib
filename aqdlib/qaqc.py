@@ -18,6 +18,17 @@ def time_time2_to_datetime(time, time2):
 
     return np.array(times)
 
+def load_cdf(cdf_filename, varis):
+    try:
+        rg = nc.Dataset(cdf_filename, 'r')
+        RAW = {}
+        for var in varis:
+            RAW[var] = rg[var][:]
+
+        return RAW
+
+    finally:
+        rg.close()
 
 def add_min_max(cdf_filename):
     """
