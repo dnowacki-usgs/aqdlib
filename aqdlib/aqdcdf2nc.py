@@ -23,6 +23,9 @@ def cdf_to_nc(cdf_filename, metadata, p_1ac=False):
     qaqc.add_min_max(nc_filename)
     print('Added min/max values')
 
+    qaqc.add_final_metadata(nc_filename)
+    print('Added final metadata')
+
     print('Done writing NetCDF file', nc_filename)
 
     return VEL

@@ -30,6 +30,15 @@ def load_cdf(cdf_filename, varis):
     finally:
         rg.close()
 
+def add_final_metadata(cdf_filename):
+    try:
+        rg = nc.Dataset(cdf_filename, 'r+')
+
+        rg.history = 'Processed to EPIC using aqdlib'
+
+    finally:
+        rg.close()
+
 def add_min_max(cdf_filename):
     """
     Add minimum and maximum values to variables in NC or CDF files
