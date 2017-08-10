@@ -16,6 +16,37 @@ def load_cdf(cdf_filename, varis):
             RAW[var] = rg[var][:]
 
         return RAW
+    except:
+        print('error opening netCDF file')
+    finally:
+        rg.close()
+
+def load_press_ac(cdf_filename, varis):
+    try:
+        rg = nc.Dataset(cdf_filename, 'r')
+        press_ac = {}
+        press_ac['time'] = rg['time'][:]
+        press_ac['p_1ac'] = rg['p_1ac'][:]
+        press_ac['datetime'] = nc.num2date(press_ac['time'], units=rg['time'].units, calendar=rg['time'].calendar)
+
+        return press_ac
+    finally:
+        rg.close()
+
+def save_press_ac(cdf_filename, datetimes, p_1ac):
+    try:
+        rg = nc.Dataset(cdf_filename, 'w', format='NETCDF4', clobber=True)
+
+        time = rg.createDimension('time', 0)
+
+        timeid = rg.createVariable('time', 'f8', ('time',))
+        timeid.units = 'hours since 0001-01-01 00:00:00.0'
+        timeid.calendar = 'gregorian'
+
+        Pressid = rg.createVariable('p_1ac', 'f', ('time',), fill_value=False)
+
+        timeid[:] = nc.date2num(datetimes, units=timeid.units, calendar=timeid.calendar)
+        Pressid[:] = p_1ac
 
     finally:
         rg.close()
@@ -236,8 +267,10 @@ def trim_vel(VEL, metadata, INFO):
     N, M = np.shape(VEL['U'])
 
     if 'press_ac' in VEL:
+        print('Using atmospherically corrected pressure to trim')
         WL = VEL['press_ac'] + INFO['transducer_offset_from_bottom']
     else:
+        print('Using NON-atmospherically corrected pressure to trim')
         WL = VEL['pressure'] + INFO['transducer_offset_from_bottom']
 
 
