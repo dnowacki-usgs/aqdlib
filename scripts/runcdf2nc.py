@@ -18,7 +18,7 @@ args = parser.parse_args()
 metadata = aqdlib.read_globalatts(args.gatts)
 
 # Add additional metadata from metadata config file
-config = yaml.safe_load(open(args.metadata))
+config = yaml.safe_load(open(args.config))
 
 for k in config:
     metadata[k] = config[k]
