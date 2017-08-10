@@ -249,7 +249,7 @@ def trim_vel(VEL, metadata, INFO):
 
 
     if 'trim_method' in metadata:
-        blank = INFO['AQDBlankingDistance'] + metadata['transducer_offset_from_bottom'] # TODO: check this logic
+        blank = INFO['AQDBlankingDistance'] + INFO['transducer_offset_from_bottom'] # TODO: check this logic
         binn = INFO['bin_size']
         binc = INFO['bin_count']
         if metadata['trim_method'].lower() == 'water level' or metadata['trim_method'].lower() == 'water level sl':
