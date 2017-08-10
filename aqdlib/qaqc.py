@@ -8,16 +8,6 @@ import netCDF4 as nc
 import aqdlib
 import datetime as dt
 
-def time_time2_to_datetime(time, time2):
-    times = []
-
-    for t, t2 in zip(time, time2):
-        year, mon, day, frac = jdcal.jd2gcal(t - 0.5, t2/86400000)
-        hour, minute, second = day2hms(frac)
-        times.append(dt.datetime(year, mon, day, hour, minute, second, tzinfo=pytz.utc))
-
-    return np.array(times)
-
 def load_cdf(cdf_filename, varis):
     try:
         rg = nc.Dataset(cdf_filename, 'r')
@@ -38,6 +28,18 @@ def add_final_metadata(cdf_filename):
 
     finally:
         rg.close()
+
+def time_time2_to_datetime(time, time2):
+    times = []
+
+    for t, t2 in zip(time, time2):
+        year, mon, day, frac = jdcal.jd2gcal(t - 0.5, t2/86400000)
+        hour, minute, second = day2hms(frac)
+        times.append(dt.datetime(year, mon, day, hour, minute, second, tzinfo=pytz.utc))
+
+    return np.array(times)
+
+
 
 def add_min_max(cdf_filename):
     """
