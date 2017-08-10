@@ -74,9 +74,9 @@ def insert_fill_values(RAW):
 
 def check_orientation(RAW, metadata):
     print('Insrument orientation:', metadata['orientation'])
-    print('Center_first_bin = %f\n' % metadata['center_first_bin'])
-    print('bin_size = %f\n' % metadata['bin_size'])
-    print('bin_count = %f\n' % metadata['bin_count'])
+    print('Center_first_bin = %f' % metadata['center_first_bin'])
+    print('bin_size = %f' % metadata['bin_size'])
+    print('bin_count = %f' % metadata['bin_count'])
     # TODO: these values are already in the HDR file...
     RAW['bindist'] = np.linspace(metadata['center_first_bin'],
                                  (metadata['center_first_bin'] + ((metadata['bin_count'] - 1) * metadata['bin_size'])),
