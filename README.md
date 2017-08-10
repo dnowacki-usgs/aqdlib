@@ -7,8 +7,8 @@ This module contains code to process Nortek Aquadopp Profiler data as exported f
 
 ## Text to raw netCDF (.cdf)
 
-This step will generally be completed via the runhdr2cdf.py script, which relies heavily on this module.
+This step will generally be completed via the `runhdr2cdf.py` script, which relies heavily on this module.
 
 ## Raw netCDF (.cdf) to EPIC-compliant and processed netCDF (.nc)
 
-This step will generally be completed via the runcdf2nc.py script, which also relies heavily on this module.
+This step will generally be completed via the `runcdf2nc.py` script, which also relies heavily on this module.
