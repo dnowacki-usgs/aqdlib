@@ -123,7 +123,7 @@ def define_aqd_nc_file(nc_filename, VEL, metadata, INFO):
 
     with Dataset(nc_filename, 'w', format='NETCDF4', clobber=True) as rg:
 
-        # Assign COMPOSITE global attribute (used to be done at end)
+        # Assign COMPOSITE global attribute (formerly assigned at end)
         rg.COMPOSITE = 0
 
         time = rg.createDimension('time', 0)
