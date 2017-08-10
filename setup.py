@@ -7,6 +7,6 @@ setup(name='aqdlib',
       author_email='dnowacki@usgs.gov',
       url='https://github.com/dnowacki-usgs/aqdlib',
       install_requires=['numpy', 'netCDF4'],
-      scripts=['scripts/runaqd2cdf.py', 'scripts/runcdf2nc.py']
+      scripts=['scripts/runaqd2cdf.py', 'scripts/runcdf2nc.py'],
       packages=['aqdlib'],
      )
