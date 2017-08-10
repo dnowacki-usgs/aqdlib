@@ -32,8 +32,7 @@ def cdf_to_nc(cdf_filename, metadata, p_1ac=False):
     return VEL
 
 def load_cdf_amp_vel(cdf_filename, VEL, metadata, p_1ac=False):
-    try:
-        rg = Dataset(cdf_filename, 'r')
+    with Dataset(cdf_filename, 'r') as rg:
 
         # Create INFO dict with global attributes from dataset
         INFO = {}
@@ -117,15 +116,12 @@ def load_cdf_amp_vel(cdf_filename, VEL, metadata, p_1ac=False):
 
         return VEL, INFO
 
-    finally:
-        rg.close()
-
 def define_aqd_nc_file(nc_filename, VEL, metadata, INFO):
-    try:
-        N, M = np.shape(VEL['U'])
-        print('N:', N, 'M:', M, 'in define_aqd_nc_file')
 
-        rg = Dataset(nc_filename, 'w', format='NETCDF4', clobber=True)
+    N, M = np.shape(VEL['U'])
+    print('N:', N, 'M:', M, 'in define_aqd_nc_file')
+
+    with Dataset(nc_filename, 'w', format='NETCDF4', clobber=True) as rg:
 
         # Assign COMPOSITE global attribute (used to be done at end)
         rg.COMPOSITE = 0
@@ -279,15 +275,12 @@ def define_aqd_nc_file(nc_filename, VEL, metadata, INFO):
             add_attributes(ACPressid, metadata, INFO)
             ACPressid.note = 'Corrected for variations in atmospheric pressure using nearby MET station'
 
-    finally:
-        rg.close()
-
 def write_aqd_nc_file(nc_filename, VEL, metadata):
 
-    try:
-        N, M = np.shape(VEL['U'])
-        print('N:', N, 'M:', M, 'in write_aqd_nc_file')
-        rg = Dataset(nc_filename, 'r+')
+    N, M = np.shape(VEL['U'])
+    print('N:', N, 'M:', M, 'in write_aqd_nc_file')
+
+    with Dataset(nc_filename, 'r+') as rg:
 
         rg['lat'][:] = metadata['latitude']
         rg['lon'][:] = metadata['longitude']
@@ -311,6 +304,3 @@ def write_aqd_nc_file(nc_filename, VEL, metadata):
         rg['Ptch_1216'][:] = VEL['pitch'][np.newaxis, np.newaxis, :]
         rg['Roll_1217'][:] = VEL['roll'][np.newaxis, np.newaxis, :]
         rg['Hdg_1215'][:] = VEL['heading'][np.newaxis, np.newaxis, :]
-
-    finally:
-        rg.close()

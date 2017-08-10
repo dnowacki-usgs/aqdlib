@@ -145,8 +145,7 @@ def write_aqd_cdf_data(cdf_filename, RAW, metadata):
     Write data to NetCDF file that has already been set up using
     define_aqd_cdf_file()
     """
-    try:
-        rg = Dataset(cdf_filename, 'r+')
+    with Dataset(cdf_filename, 'r+') as rg:
 
         rg['lat'][:] = metadata['latitude']
         rg['lon'][:] = metadata['longitude']
@@ -181,16 +180,12 @@ def write_aqd_cdf_data(cdf_filename, RAW, metadata):
         if 'AnaInp2' in RAW:
             rg['AnalogInput2'][:] = RAW['AnaInp2']
 
-    finally:
-        rg.close()
-
 def define_aqd_cdf_file(cdf_filename, RAW, metadata):
     """
     Define dimensions and variables in NetCDF file
     """
 
-    try:
-        rg = Dataset(cdf_filename, 'w', format='NETCDF4', clobber=True)
+    with Dataset(cdf_filename, 'w', format='NETCDF4', clobber=True) as rg:
 
         # write out EPIC metadata
         write_metadata(rg, metadata)
@@ -352,9 +347,6 @@ def define_aqd_cdf_file(cdf_filename, RAW, metadata):
             # if isfield(metadata.AnalogInput1.cals,'SEDcoef'),
             #         netcdf.putAtt(ncid,Ana1id,'SEDcoef',metadata.AnalogInput1.cals.SEDcoef);
             # end
-
-    finally:
-        rg.close()
 
 def write_metadata(rg, metadata):
     """

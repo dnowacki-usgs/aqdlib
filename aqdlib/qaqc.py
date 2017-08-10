@@ -9,34 +9,24 @@ import aqdlib
 import datetime as dt
 
 def load_cdf(cdf_filename, varis):
-    try:
-        rg = nc.Dataset(cdf_filename, 'r')
+    with nc.Dataset(cdf_filename, 'r') as rg:
         RAW = {}
         for var in varis:
             RAW[var] = rg[var][:]
 
         return RAW
-    except:
-        print('error opening netCDF file')
-    finally:
-        rg.close()
 
 def load_press_ac(cdf_filename, varis):
-    try:
-        rg = nc.Dataset(cdf_filename, 'r')
+    with nc.Dataset(cdf_filename, 'r') as rg:
         press_ac = {}
         press_ac['time'] = rg['time'][:]
         press_ac['p_1ac'] = rg['p_1ac'][:]
         press_ac['datetime'] = nc.num2date(press_ac['time'], units=rg['time'].units, calendar=rg['time'].calendar)
 
         return press_ac
-    finally:
-        rg.close()
 
 def save_press_ac(cdf_filename, datetimes, p_1ac):
-    try:
-        rg = nc.Dataset(cdf_filename, 'w', format='NETCDF4', clobber=True)
-
+    with nc.Dataset(cdf_filename, 'w', format='NETCDF4', clobber=True) as rg:
         time = rg.createDimension('time', 0)
 
         timeid = rg.createVariable('time', 'f8', ('time',))
@@ -48,17 +38,9 @@ def save_press_ac(cdf_filename, datetimes, p_1ac):
         timeid[:] = nc.date2num(datetimes, units=timeid.units, calendar=timeid.calendar)
         Pressid[:] = p_1ac
 
-    finally:
-        rg.close()
-
 def add_final_metadata(cdf_filename):
-    try:
-        rg = nc.Dataset(cdf_filename, 'r+')
-
+    with nc.Dataset(cdf_filename, 'r+') as rg:
         rg.history = 'Processed to EPIC using aqdlib'
-
-    finally:
-        rg.close()
 
 def time_time2_to_datetime(time, time2):
     times = []
@@ -76,8 +58,7 @@ def add_min_max(cdf_filename):
     """
     Add minimum and maximum values to variables in NC or CDF files
     """
-    try:
-        rg = nc.Dataset(cdf_filename, 'r+')
+    with nc.Dataset(cdf_filename, 'r+') as rg:
         exclude = rg.dimensions.keys()
         exclude.extend(('time2', 'TIM'))
         for var in rg.variables:
@@ -85,15 +66,11 @@ def add_min_max(cdf_filename):
                 rg[var].minimum = np.nanmin(rg[var][:])
                 rg[var].maximum = np.nanmax(rg[var][:])
 
-    finally:
-        rg.close()
-
 def add_fill_values(cdf_filename):
     """
     Assign _FillValue to each variable
     """
-    try:
-        rg = nc.Dataset(cdf_filename, 'r+')
+    with nc.Dataset(cdf_filename, 'r+') as rg:
         exclude = rg.dimensions.keys()
         exclude.extend(('time2', 'TIM'))
         for var in rg.variables:
@@ -101,9 +78,6 @@ def add_fill_values(cdf_filename):
                 print(var, rg[var].dtype)
                 if rg[var].dtype == 'float32':
                     rg[var]._FillValue = aqdlib.DOUBLE_FILL
-
-    finally:
-        rg.close()
 
 def plot_inwater(RAW, inwater_time, outwater_time):
     plt.figure(figsize=(12,8))
