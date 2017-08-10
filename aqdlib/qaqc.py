@@ -263,10 +263,14 @@ def trim_vel(VEL, metadata, INFO):
             elif metadata['trim_method'].lower() == 'water level sl':
                 bads = d2 >= WL2 * np.cos(np.deg2rad(INFO['AQDBeamAngle']))
 
-            VEL['U'][bads] = np.nan
-            VEL['V'][bads] = np.nan
-            VEL['W'][bads] = np.nan
-            VEL['AGC'][bads] = np.nan
+            # Experiment with masked arrays
+            for var in ['U', 'V', 'W', 'AGC']:
+                VEL[var] = np.ma.masked_array(VEL[var], bads)
+
+            # VEL['U'][bads] = np.nan
+            # VEL['V'][bads] = np.nan
+            # VEL['W'][bads] = np.nan
+            # VEL['AGC'][bads] = np.nan
 
             # find first bin that is all bad values
             lastbin = np.argmin(np.all(bads, axis=0) == False)
