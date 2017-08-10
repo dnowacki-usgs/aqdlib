@@ -2,23 +2,15 @@
 
 from __future__ import division, print_function
 
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
-import datetime as dt
-import sys
-import os
-sys.path.append('/Users/dnowacki/Documents/aqdlib')
 import aqdlib
-import shutil
 import argparse
 import yaml
 
 parser = argparse.ArgumentParser(description='Convert raw Aquadopp .cdf format to processed .nc files')
 parser.add_argument('cdfname', help='raw .CDF filename')
 parser.add_argument('gatts', help='path to global attributes file (gatts formatted)')
-parser.add_argument('metadata', help='path to ancillary metadata file (YAML formatted)')
-parser.add_argument('--p_1ac', help='path to cdf file containing atmospherically corrected pressure data')
+parser.add_argument('config', help='path to ancillary config file (YAML formatted)')
+parser.add_argument('--p_1ac', help='path to cdf file containing atmospherically corrected pressure data of same length as pressure data')
 
 args = parser.parse_args()
 
