@@ -31,11 +31,6 @@ config = yaml.safe_load(open(args.metadata))
 for k in config:
     metadata[k] = config[k]
 
-# add a few extra metadata variables
-metadata['nominal_sensor_depth_note']: 'WATER_DEPTH-initial_instrument_height'
-metadata['nominal_sensor_depth'] = metadata['WATER_DEPTH'] - metadata['initial_instrument_height']
-metadata['transducer_offset_from_bottom'] = metadata['initial_instrument_height']
-
 if args.p_1ac:
     press_ac = aqdlib.load_press_ac('press_ac.cdf', ['p_1ac'])
     VEL = aqdlib.cdf_to_nc(args.cdfname, metadata, p_1ac=press_ac['p_1ac'])

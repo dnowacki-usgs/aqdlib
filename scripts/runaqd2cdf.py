@@ -34,9 +34,4 @@ config = yaml.safe_load(open(args.metadata))
 for k in config:
     metadata[k] = config[k]
 
-# add a few extra metadata variables
-metadata['nominal_sensor_depth_note']: 'WATER_DEPTH-initial_instrument_height'
-metadata['nominal_sensor_depth'] = metadata['WATER_DEPTH'] - metadata['initial_instrument_height']
-metadata['transducer_offset_from_bottom'] = metadata['initial_instrument_height']
-
 RAW = aqdlib.prf_to_cdf(args.basename, metadata)

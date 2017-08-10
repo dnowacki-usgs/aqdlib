@@ -97,6 +97,11 @@ def check_orientation(RAW, metadata):
 
 def check_metadata(metadata, instmeta):
 
+    # Add some metadata originally in the run scripts
+    metadata['nominal_sensor_depth_note'] = 'WATER_DEPTH - initial_instrument_height'
+    metadata['nominal_sensor_depth'] = metadata['WATER_DEPTH'] - metadata['initial_instrument_height']
+    metadata['transducer_offset_from_bottom'] = metadata['initial_instrument_height']
+
     # % now verify the global metadata for standard EPIC and cmg stuff
     # % everything in metadata and instmeta get written as global attributes
     # % these also get copied to the .nc file
