@@ -20,6 +20,7 @@ def cdf_to_nc(cdf_filename, metadata, p_1ac=False):
 
     write_aqd_nc_file(nc_filename, VEL, metadata)
 
+    # TODO: Need to add all global attributes from CDF to NC file (or similar)
     qaqc.add_min_max(nc_filename)
     print('Added min/max values')
 
@@ -38,7 +39,6 @@ def load_cdf_amp_vel(cdf_filename, VEL, metadata, p_1ac=False):
         INFO = {}
         for k, v in rg.__dict__.iteritems():
             INFO[k] = v
-            # print(k, INFO[k])
 
         # clip either by ensemble indices or by the deployment and recovery date specified in metadata
         if 'good_ens' in metadata:
@@ -127,6 +127,9 @@ def define_aqd_nc_file(nc_filename, VEL, metadata, INFO):
 
         rg = Dataset(nc_filename, 'w', format='NETCDF4', clobber=True)
 
+        # Assign COMPOSITE global attribute (used to be done at end)
+        rg.COMPOSITE = 0
+
         time = rg.createDimension('time', 0)
         depth = rg.createDimension('depth', M)
         lat = rg.createDimension('lat', 1)
@@ -175,6 +178,7 @@ def define_aqd_nc_file(nc_filename, VEL, metadata, INFO):
         # put in attributes common to all velocity components
         def add_vel_attributes(vel, metadata, INFO):
             vel.units = 'cm/s'
+            vel.data_cmnt = 'Velocity in shallowest bin is often suspect and should be used with caution'
             add_attributes(vel, metadata, INFO)
             # TODO: why do we only do trim_method for Water Level SL?
             if 'trim_method' in metadata and metadata['trim_method'].lower() == 'water level sl':
@@ -253,7 +257,7 @@ def define_aqd_nc_file(nc_filename, VEL, metadata, INFO):
         rollid.setncattr('name', 'Roll')
         rollid.long_name = 'INST Roll'
         rollid.generic_name = 'roll'
-        add_attributes(ptchid, metadata, INFO)
+        add_attributes(rollid, metadata, INFO)
 
         # TODO: add analog input variables (OBS, NTU, etc)
 
@@ -261,6 +265,7 @@ def define_aqd_nc_file(nc_filename, VEL, metadata, INFO):
         bdepid.setncattr('name', 'bin depth')
         bdepid.units = 'm'
         bdepid.initial_instrument_height = metadata['initial_instrument_height']
+        add_attributes(bdepid, metadata, INFO)
         if 'press_ac' in VEL:
             bdepid.note = 'Actual depth time series of velocity bins. Calculated as corrected pressure(P_1ac) - bindist.'
         else:
