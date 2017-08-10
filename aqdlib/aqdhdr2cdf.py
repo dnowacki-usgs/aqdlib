@@ -502,9 +502,9 @@ def read_aqd_hdr(basefile):
         elif 'Power output' in row:
             Instmeta['AQDAnalogPowerOutput'] = row[38:]
         elif 'Analog input #1 calibration (a0, a1)' in row:
-            Instmeta['AQDAnalogInputCal1'] = float(row[38:])
+            Instmeta['AQDAnalogInputCal1'] = row[38:]
         elif 'Analog input #2 calibration (a0, a1)' in row:
-            Instmeta['AQDAnalogInputCal2'] = float(row[38:])
+            Instmeta['AQDAnalogInputCal2'] = row[38:]
         elif 'Sync signal data out delay' in row:
             Instmeta['AQDSyncOutDelay'] = row[38:]
         elif 'Sync signal power down delay' in row:
