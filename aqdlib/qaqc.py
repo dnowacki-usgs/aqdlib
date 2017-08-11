@@ -66,19 +66,6 @@ def add_min_max(cdf_filename):
                 rg[var].minimum = np.nanmin(rg[var][:])
                 rg[var].maximum = np.nanmax(rg[var][:])
 
-def add_fill_values(cdf_filename):
-    """
-    Assign _FillValue to each variable
-    """
-    with nc.Dataset(cdf_filename, 'r+') as rg:
-        exclude = rg.dimensions.keys()
-        exclude.extend(('time2', 'TIM'))
-        for var in rg.variables:
-            if var not in exclude:
-                print(var, rg[var].dtype)
-                if rg[var].dtype == 'float32':
-                    rg[var]._FillValue = aqdlib.DOUBLE_FILL
-
 def plot_inwater(RAW, inwater_time, outwater_time):
     plt.figure(figsize=(12,8))
     plt.plot(RAW['datetime'], RAW['pressure'])
