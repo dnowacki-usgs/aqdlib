@@ -52,8 +52,6 @@ def time_time2_to_datetime(time, time2):
 
     return np.array(times)
 
-
-
 def add_min_max(cdf_filename):
     """
     Add minimum and maximum values to variables in NC or CDF files
@@ -125,9 +123,6 @@ def coord_transform(vel1, vel2, vel3, heading, pitch, roll, T, cs):
 
 def set_orientation(VEL, T, metadata, INFO):
     # TODO: this code seems too complicated. also should we really be modifying the trans matrix?
-    # TODO: deal with atmos pressure
-
-    # print(INFO)
 
     N, M = np.shape(VEL['U'])
 
@@ -141,18 +136,13 @@ def set_orientation(VEL, T, metadata, INFO):
     blank3 = INFO['transducer_offset_from_bottom'] - INFO['AQDBlankingDistance']
     binc = INFO['bin_count']
 
-    # print(Wdepth, binn, blank2)
-
     if INFO['orientation'] == 'UP':
         print('User instructed that instrument was pointing UP')
-        # VEL['depths'] = np.flipud(np.arange(Wdepth - (binn * (M - 1) + blank2 + binn), Wdepth - (blank2 + binn), binn)) # need to use flipud because 1d array
-        VEL['depths'] = np.flipud(np.linspace(Wdepth - (binn * (M - 1) + blank2 + binn), Wdepth - (blank2 + binn), num=binc))
-        # print(VEL['depths'])
+        VEL['depths'] = np.flipud(np.linspace(Wdepth - (binn * (M - 1) + blank2 + binn), Wdepth - (blank2 + binn), num=binc)) # need to use flipud because 1d array
     elif INFO['orientation'] == 'DOWN':
         print('User instructed that instrument was pointing DOWN')
         T[1,:] = -T[1,:]
         T[2,:] = -T[2,:]
-        # VEL['depths'] = np.arange(Wdepth - blank3 + binn, Wdepth - blank3 + binn * M, binn)
         VEL['depths'] = np.linspace(Wdepth - blank3 + binn, Wdepth - blank3 + binn * M, num=binc)
 
     return VEL, T
