@@ -9,9 +9,7 @@ import aqdlib
 import qaqc
 
 def prf_to_cdf(basefile, metadata):
-    """
-    Main load file
-    """
+    """Main load file"""
 
     # get instrument metadata from the HDR file
     instmeta = read_aqd_hdr(basefile)
@@ -64,6 +62,8 @@ def prf_to_cdf(basefile, metadata):
     return RAW
 
 def insert_fill_values(RAW):
+    """Insert fill values for nans"""
+
     print("Inserting fill values")
     for k in RAW:
         if k not in ['instmeta', 'time', 'time2', 'datetime'] and np.max(np.shape(RAW[k])) == np.max(np.shape(RAW['jd'])):
@@ -73,6 +73,8 @@ def insert_fill_values(RAW):
     return RAW
 
 def check_orientation(RAW, metadata):
+    """Check instrument orientation and create variables that depend on this"""
+
     print('Insrument orientation:', metadata['orientation'])
     print('Center_first_bin = %f' % metadata['center_first_bin'])
     print('bin_size = %f' % metadata['bin_size'])
@@ -181,9 +183,7 @@ def write_aqd_cdf_data(cdf_filename, RAW, metadata):
             rg['AnalogInput2'][:] = RAW['AnaInp2']
 
 def define_aqd_cdf_file(cdf_filename, RAW, metadata):
-    """
-    Define dimensions and variables in NetCDF file
-    """
+    """Define dimensions and variables in NetCDF file"""
 
     with Dataset(cdf_filename, 'w', format='NETCDF4', clobber=True) as rg:
 
@@ -349,16 +349,14 @@ def define_aqd_cdf_file(cdf_filename, RAW, metadata):
             # end
 
 def write_metadata(rg, metadata):
-    """
-    Write out all metadata to CDF file
-    """
+    """Write out all metadata to CDF file"""
+
     for k in metadata.keys():
         setattr(rg, k, metadata[k])
 
 def compute_time(RAW, instmeta):
-    """
-    Compute Julian date and then time and time2 for use in NetCDF file
-    """
+    """Compute Julian date and then time and time2 for use in NetCDF file"""
+
     # shift times to center of ensemble
     RAW['datetime'] = RAW['datetime'] + dt.timedelta(seconds=instmeta['AQDAverageInterval']/2)
 
@@ -371,9 +369,8 @@ def compute_time(RAW, instmeta):
     return RAW
 
 def load_sen(RAW, basefile, metadata):
-    """
-    Load data from .sen file
-    """
+    """Load data from .sen file"""
+
     senfile = basefile + '.sen'
     SEN = np.genfromtxt(senfile);
 
@@ -398,9 +395,8 @@ def load_sen(RAW, basefile, metadata):
     return RAW
 
 def load_amp_vel(RAW, basefile):
-    """
-    Load amplitude and velocity data from the .aN and .vN files
-    """
+    """Load amplitude and velocity data from the .aN and .vN files"""
+
     for n in [1, 2, 3]:
         afile = basefile + '.a' + str(n)
         RAW['AMP' + str(n)] = np.genfromtxt(afile)

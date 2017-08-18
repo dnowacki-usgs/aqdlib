@@ -9,6 +9,8 @@ import aqdlib
 import datetime as dt
 
 def load_cdf(cdf_filename, varis):
+    """Load all variables in a cdf file to a dictionary"""
+    
     with nc.Dataset(cdf_filename, 'r') as rg:
         RAW = {}
         for var in varis:
@@ -43,6 +45,8 @@ def add_final_metadata(cdf_filename):
         rg.history = 'Processed to EPIC using aqdlib'
 
 def time_time2_to_datetime(time, time2):
+    """Create datetime array from time and time2 values"""
+
     times = []
 
     for t, t2 in zip(time, time2):
@@ -53,9 +57,8 @@ def time_time2_to_datetime(time, time2):
     return np.array(times)
 
 def add_min_max(cdf_filename):
-    """
-    Add minimum and maximum values to variables in NC or CDF files
-    """
+    """Add minimum and maximum values to variables in NC or CDF files"""
+
     with nc.Dataset(cdf_filename, 'r+') as rg:
         exclude = rg.dimensions.keys()
         exclude.extend(('time2', 'TIM'))
@@ -75,6 +78,8 @@ def plot_inwater(RAW, inwater_time, outwater_time):
     plt.show()
 
 def coord_transform(vel1, vel2, vel3, heading, pitch, roll, T, cs):
+    """Perform coordinate transformation to ENU"""
+
     N, M = np.shape(vel1)
 
     u = np.zeros((N,M))
@@ -148,6 +153,7 @@ def set_orientation(VEL, T, metadata, INFO):
     return VEL, T
 
 def make_bin_depth(VEL, metadata):
+    """Create bin_depth variable"""
 
     N, M = np.shape(VEL['U'])
 
@@ -159,6 +165,7 @@ def make_bin_depth(VEL, metadata):
     return VEL
 
 def magvar_correct(VEL, metadata):
+    """Correct for magnetic declination at site"""
 
     if 'magnetic_variation_at_site' in metadata:
         magvardeg = metadata['magnetic_variation_at_site']
@@ -187,6 +194,8 @@ def magvar_correct(VEL, metadata):
     return VEL
 
 def create_water_depth(VEL, metadata):
+    """Create water_depth variable"""
+
     if 'initial_instrument_height' in metadata:
         if 'press_ac' in VEL:
             metadata['nominal_instrument_depth'] = np.nanmean(VEL['press_ac'])
@@ -215,6 +224,8 @@ def create_water_depth(VEL, metadata):
     return VEL, metadata
 
 def trim_vel(VEL, metadata, INFO):
+    """Trim velocity data depending on specified method"""
+
     N, M = np.shape(VEL['U'])
 
     if 'press_ac' in VEL:
@@ -271,6 +282,8 @@ def trim_vel(VEL, metadata, INFO):
     return VEL
 
 def day2hms(d):
+    """Convert fractional day value into hour, minute, second"""
+
     frachours = d * 24
     h = np.int(np.floor(frachours))
     fracmins = (frachours - h) * 60
@@ -281,15 +294,13 @@ def day2hms(d):
     return h, m, s
 
 def hms2h(h,m,s):
-    """
-    Convert hour, minute, second to fractional hour
-    """
+    """Convert hour, minute, second to fractional hour"""
+
     return h + m/60 + s/60/60
 
 def julian(t):
-    """
-    Compute Julian date, relying heavily on jdcal package
-    """
+    """Compute Julian date, relying heavily on jdcal package"""
+
     y = t.year
     m = t.month
     d = t.day
