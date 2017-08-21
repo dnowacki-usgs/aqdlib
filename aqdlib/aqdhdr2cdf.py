@@ -449,8 +449,17 @@ def read_aqd_hdr(basefile):
             Instmeta['AQDCompassUpdateRate'] = float(row[38:idx])
         elif 'Wave measurements' in row:
             Instmeta['WaveMeasurements'] = row[38:]
-            # we are measuring waves
-            # TODO: double check on this, the logic in the m-file seems wrong
+        elif 'Wave - Powerlevel' in row:
+            Instmeta['WavePower'] = row[38:]
+        elif 'Wave - Interval' in row:
+            idx = row.find(' sec')
+            Instmeta['WaveInterval'] = float(row[38:idx])
+        elif 'Wave - Number of samples' in row:
+            Instmeta['WaveNumberOfSamples'] = float(row[38:])
+        elif 'Wave - Sampling rate' in row:
+            Instmeta['WaveSampleRate'] = row[38:]
+        elif 'Wave - Cell size' in row:
+            Instmeta['WaveCellSize'] = row[38:]
         elif 'Analog input 1' in row:
             Instmeta['AQDAnalogInput1'] = row[38:]
         elif 'Analog input 2' in row:
@@ -526,23 +535,6 @@ def read_aqd_hdr(basefile):
                 row = f.readline().rstrip()
         elif 'Pressure sensor calibration' in row:
             Instmeta['AQDPressureCal'] = row[38:]
-
-    #          elseif (strfind(str,'Wave measurements'))
-    #              Instmeta.WaveMeasurements = (str(39:end));
-    #             if strcmp(Instmeta.WaveMeasurements,'ENABLED')
-    #              elseif (strfind(str,'Wave - Powerlevel'))
-    #                  Instmeta.WavePower = (str(39:is-2));
-    #              elseif (strfind(str,'Wave - Interval'))
-    #                  is=findstr(str,'sec');
-    #                  Instmeta.WaveInterval = str2num(str(39:is-2));
-    #              elseif (strfind(str,'Wave - Number of samples'))
-    #                  Instmeta.WaveNumberOfSamples = str2num(str(39:42));
-    #              elseif (strfind(str,'Wave - Sampling rate'))
-    #                  Instmeta.WaveSampleRate = str(39:42);
-    #              elseif (strfind(str,'Wave - Cell size'))
-    #                  Instmeta.WaveCellSize = str(39:42);
-    #             end
-
 
     # % infer some things based on the Aquadopp brochure
     if Instmeta['AQDFrequency'] == 400:
