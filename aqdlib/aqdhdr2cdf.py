@@ -8,6 +8,7 @@ import netCDF4
 # from aqdlib import aqdlib.DOUBLE_FILL
 import aqdlib
 import qaqc
+import pandas as pd
 
 def prf_to_cdf(basefile, metadata):
     """Main load file"""
@@ -377,7 +378,7 @@ def load_sen(RAW, basefile, metadata):
     """Load data from .sen file"""
 
     senfile = basefile + '.sen'
-    SEN = np.genfromtxt(senfile);
+    SEN = pd.read_csv(senfile, header=None, delim_whitespace=True).values
 
     RAW['heading'] = SEN[:,10]
     RAW['pitch'] = SEN[:,11]
@@ -404,9 +405,9 @@ def load_amp_vel(RAW, basefile):
 
     for n in [1, 2, 3]:
         afile = basefile + '.a' + str(n)
-        RAW['AMP' + str(n)] = np.genfromtxt(afile)
+        RAW['AMP' + str(n)] = pd.read_csv(afile, header=None, delim_whitespace=True).values
         vfile = basefile + '.v' + str(n)
-        RAW['Vvel' + str(n)] = np.genfromtxt(vfile)
+        RAW['Vvel' + str(n)] = pd.read_csv(vfile, header=None, delim_whitespace=True).values
         # convert to cm/s
         RAW['V' + str(n)] = RAW['Vvel' + str(n)] * 100
 
