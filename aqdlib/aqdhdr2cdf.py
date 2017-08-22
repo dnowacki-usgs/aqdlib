@@ -4,6 +4,7 @@ import numpy as np
 import datetime as dt
 import pytz
 from netCDF4 import Dataset
+import netCDF4
 # from aqdlib import aqdlib.DOUBLE_FILL
 import aqdlib
 import qaqc
@@ -149,8 +150,12 @@ def write_aqd_cdf_data(cdf_filename, RAW, metadata):
     """
     with Dataset(cdf_filename, 'r+') as rg:
 
+        print (rg['cf_time'].units)
         rg['lat'][:] = metadata['latitude']
         rg['lon'][:] = metadata['longitude']
+        # TODO: not too comfortable with this hack that removes TZ info...
+        timenaive = [x.replace(tzinfo=None) for x in RAW['datetime']]
+        rg['cf_time'][:] = netCDF4.date2num(timenaive, rg['cf_time'].units)
         rg['time'][:] = RAW['time']
         rg['time2'][:] = RAW['time2']
         rg['depth'][:] = RAW['Depths']
