@@ -74,7 +74,7 @@ def insert_fill_values(RAW):
 
     return RAW
 
-def check_orientation(RAW, metadata):
+def check_orientation(RAW, metadata, waves=False):
     """Check instrument orientation and create variables that depend on this"""
 
     print('Insrument orientation:', metadata['orientation'])
@@ -82,9 +82,13 @@ def check_orientation(RAW, metadata):
     print('bin_size = %f' % metadata['bin_size'])
     print('bin_count = %f' % metadata['bin_count'])
     # TODO: these values are already in the HDR file...
-    RAW['bindist'] = np.linspace(metadata['center_first_bin'],
-                                 (metadata['center_first_bin'] + ((metadata['bin_count'] - 1) * metadata['bin_size'])),
-                                 num=metadata['bin_count'])
+    if not waves:
+        RAW['bindist'] = np.linspace(metadata['center_first_bin'],
+                                     (metadata['center_first_bin'] + ((metadata['bin_count'] - 1) * metadata['bin_size'])),
+                                     num=metadata['bin_count'])
+    else:
+        RAW['bindist'] = RAW['cellpos'][0]
+
 
     if metadata['orientation'] == 'UP':
         print('User instructed that instrument was pointing UP')
@@ -99,7 +103,7 @@ def check_orientation(RAW, metadata):
 
     return RAW
 
-def check_metadata(metadata, instmeta):
+def check_metadata(metadata, instmeta, waves=False):
 
     # Add some metadata originally in the run scripts
     metadata['nominal_sensor_depth_note'] = 'WATER_DEPTH - initial_instrument_height'
@@ -118,13 +122,18 @@ def check_metadata(metadata, instmeta):
 
     # update metadata from Aquadopp header to CMG standard so that various
     # profilers have the same attribute wording.  Redundant, but necessary
-    metadata['bin_count'] = instmeta['AQDNumberOfCells']
-    metadata['bin_size'] = instmeta['AQDCellSize'] / 100 # from cm to m
-    metadata['blanking_distance'] = instmeta['AQDBlankingDistance'] # already in m
-    # Nortek lists the distance to the center of the first bin as the blanking
-    # distance plus one cell size
-    metadata['center_first_bin'] = metadata['blanking_distance'] + metadata['bin_size'] # in m
-
+    if not waves:
+        metadata['bin_count'] = instmeta['AQDNumberOfCells']
+        metadata['bin_size'] = instmeta['AQDCellSize'] / 100 # from cm to m
+        metadata['blanking_distance'] = instmeta['AQDBlankingDistance'] # already in m
+        # Nortek lists the distance to the center of the first bin as the blanking
+        # distance plus one cell size
+        metadata['center_first_bin'] = metadata['blanking_distance'] + metadata['bin_size'] # in m
+    else:
+        metadata['bin_count'] = 1 # only 1 wave bin
+        metadata['bin_size'] = instmeta['WaveCellSize'] # already in m
+        metadata['blanking_distance'] = instmeta['AQDBlankingDistance'] # already in m
+        # need to set center_first_bin after return in main calling function
 
     metadata['salinity_set_by_user'] = instmeta['AQDSalinity']
     metadata['salinity_set_by_user_units'] = 'ppt'
@@ -144,7 +153,7 @@ def check_metadata(metadata, instmeta):
 
     return metadata
 
-def write_aqd_cdf_data(cdf_filename, RAW, metadata):
+def write_aqd_cdf_data(cdf_filename, RAW, metadata, waves=False):
     """
     Write data to NetCDF file that has already been set up using
     define_aqd_cdf_file()
@@ -162,17 +171,30 @@ def write_aqd_cdf_data(cdf_filename, RAW, metadata):
         rg['depth'][:] = RAW['Depths']
         rg['bindist'][:] = RAW['bindist']
 
-        print('rg shape:', np.shape(rg['VEL1'][:]))
-        print('V1 shape:', np.shape(RAW['V1']))
-        rg['VEL1'][:] = RAW['V1'].T
-        rg['VEL2'][:] = RAW['V2'].T
-        rg['VEL3'][:] = RAW['V3'].T
+        if not waves:
+            print('rg shape:', np.shape(rg['VEL1'][:]))
+            print('V1 shape:', np.shape(RAW['V1']))
+            rg['VEL1'][:] = RAW['V1'].T
+            rg['VEL2'][:] = RAW['V2'].T
+            rg['VEL3'][:] = RAW['V3'].T
 
-        rg['AMP1'][:] = RAW['AMP1'].T
-        rg['AMP2'][:] = RAW['AMP2'].T
-        rg['AMP3'][:] = RAW['AMP3'].T
+            rg['AMP1'][:] = RAW['AMP1'].T
+            rg['AMP2'][:] = RAW['AMP2'].T
+            rg['AMP3'][:] = RAW['AMP3'].T
+        else:
+            print('rg shape:', np.shape(rg['VEL1'][:]))
+            print('VEL1 shape:', np.shape(RAW['VEL1']))
+            rg['VEL1'][:] = RAW['VEL1']
+            rg['VEL2'][:] = RAW['VEL2']
+            rg['VEL3'][:] = RAW['VEL3']
+
+            rg['AMP1'][:] = RAW['AMP1']
+            rg['AMP2'][:] = RAW['AMP2']
+            rg['AMP3'][:] = RAW['AMP3']
 
         rg['Temperature'][:] = RAW['temperature']
+        print('rg shape:', np.shape(rg['Pressure'][:]))
+        print('V1 shape:', np.shape(RAW['pressure']))
         rg['Pressure'][:] = RAW['pressure']
         rg['Battery'][:] = RAW['battery']
 
@@ -188,7 +210,7 @@ def write_aqd_cdf_data(cdf_filename, RAW, metadata):
         if 'AnaInp2' in RAW:
             rg['AnalogInput2'][:] = RAW['AnaInp2']
 
-def define_aqd_cdf_file(cdf_filename, RAW, metadata):
+def define_aqd_cdf_file(cdf_filename, RAW, metadata, waves=False):
     """Define dimensions and variables in NetCDF file"""
 
     with Dataset(cdf_filename, 'w', format='NETCDF4', clobber=True) as rg:
@@ -197,7 +219,10 @@ def define_aqd_cdf_file(cdf_filename, RAW, metadata):
         write_metadata(rg, metadata)
         write_metadata(rg, RAW['instmeta'])
 
-        N, M = np.shape(RAW['V1'])
+        if not waves:
+            N, M = np.shape(RAW['V1'])
+        else:
+            N, M = np.shape(RAW['VEL1'])
         print('N:', N, 'M:', M, 'in define_aqd_cdf_file')
 
         # Time is the record dimension
@@ -206,6 +231,8 @@ def define_aqd_cdf_file(cdf_filename, RAW, metadata):
         lat = rg.createDimension('lat', 1)
         lon = rg.createDimension('lon', 1)
         Tmatrix = rg.createDimension('Tmatrix', 3)
+        if waves:
+            sample = rg.createDimension('sample', N)
 
         timeid = rg.createVariable('time', 'i', ('time',), fill_value=False) # 'i' == NC_INT
         timeid.units = 'True Julian Day'
@@ -239,6 +266,11 @@ def define_aqd_cdf_file(cdf_filename, RAW, metadata):
         depthid.bin_count = metadata['bin_count']
         depthid.transducer_offset_from_bottom = metadata['transducer_offset_from_bottom']
 
+        if waves:
+            burstid = rg.createVariable('burst', 'i', ('time',), fill_value=False)
+            burstid.units = 'count'
+            burstid.long_name = 'Record Number'
+
         bindistid = rg.createVariable('bindist', 'f', ('depth',), fill_value=False)
         bindistid.units = 'm'
         bindistid.long_name = 'distance from transducer head'
@@ -252,22 +284,35 @@ def define_aqd_cdf_file(cdf_filename, RAW, metadata):
         Tempid.long_name = 'TEMPERATURE (C)'
         Tempid.generic_name = 'temp'
 
-        Pressid = rg.createVariable('Pressure', 'f', ('time',), fill_value=False)
+        if waves:
+            Pressid = rg.createVariable('Pressure', 'f', ('sample', 'time',), fill_value=False)
+        else:
+            Pressid = rg.createVariable('Pressure', 'f', ('time',), fill_value=False)
         Pressid.units = 'dbar'
         Pressid.long_name = 'Pressure (dbar)'
         Pressid.generic_name = 'press'
+        Pressid.note = 'raw pressure from instrument, not corrected for changes in atmospheric pressure'
 
-        VEL1id = rg.createVariable('VEL1', 'f', ('depth', 'time',), fill_value=False)
+        if waves:
+            VEL1id = rg.createVariable('VEL1', 'f', ('sample', 'time',), fill_value=False)
+        else:
+            VEL1id = rg.createVariable('VEL1', 'f', ('depth', 'time',), fill_value=False)
         VEL1id.units = 'cm/s'
         VEL1id.Type = 'scalar'
         VEL1id.transducer_offset_from_bottom = metadata['transducer_offset_from_bottom']
 
-        VEL2id = rg.createVariable('VEL2', 'f', ('depth', 'time',), fill_value=False)
+        if waves:
+            VEL2id = rg.createVariable('VEL2', 'f', ('sample', 'time',), fill_value=False)
+        else:
+            VEL2id = rg.createVariable('VEL2', 'f', ('depth', 'time',), fill_value=False)
         VEL2id.units = 'cm/s'
         VEL2id.Type = 'scalar'
         VEL2id.transducer_offset_from_bottom = metadata['transducer_offset_from_bottom']
 
-        VEL3id = rg.createVariable('VEL3', 'f', ('depth', 'time',), fill_value=False)
+        if waves:
+            VEL3id = rg.createVariable('VEL3', 'f', ('sample', 'time',), fill_value=False)
+        else:
+            VEL3id = rg.createVariable('VEL3', 'f', ('depth', 'time',), fill_value=False)
         VEL3id.units = 'cm/s'
         VEL3id.Type = 'scalar'
         VEL3id.transducer_offset_from_bottom = metadata['transducer_offset_from_bottom']
@@ -285,19 +330,28 @@ def define_aqd_cdf_file(cdf_filename, RAW, metadata):
             VEL2id.long_name = 'Beam 2 current velocity'
             VEL3id.long_name = 'Beam 3 current velocity'
 
-        AMP1id = rg.createVariable('AMP1', 'f', ('depth', 'time',), fill_value=False)
+        if waves:
+            AMP1id = rg.createVariable('AMP1', 'f', ('sample', 'time',), fill_value=False)
+        else:
+            AMP1id = rg.createVariable('AMP1', 'f', ('depth', 'time',), fill_value=False)
         AMP1id.long_name = 'Beam 1 Echo Amplitude'
         AMP1id.units = 'counts'
         AMP1id.Type = 'scalar'
         AMP1id.transducer_offset_from_bottom = metadata['transducer_offset_from_bottom']
 
-        AMP2id = rg.createVariable('AMP2', 'f', ('depth', 'time',), fill_value=False)
+        if waves:
+            AMP2id = rg.createVariable('AMP2', 'f', ('sample', 'time',), fill_value=False)
+        else:
+            AMP2id = rg.createVariable('AMP2', 'f', ('depth', 'time',), fill_value=False)
         AMP2id.long_name = 'Beam 2 Echo Amplitude'
         AMP2id.units = 'counts'
         AMP2id.Type = 'scalar'
         AMP2id.transducer_offset_from_bottom = metadata['transducer_offset_from_bottom']
 
-        AMP3id = rg.createVariable('AMP3', 'f', ('depth', 'time',), fill_value=False)
+        if waves:
+            AMP3id = rg.createVariable('AMP3', 'f', ('sample', 'time',), fill_value=False)
+        else:
+            AMP3id = rg.createVariable('AMP3', 'f', ('depth', 'time',), fill_value=False)
         AMP3id.long_name = 'Beam 3 Echo Amplitude'
         AMP3id.units = 'counts'
         AMP3id.Type = 'scalar'
@@ -465,7 +519,8 @@ def read_aqd_hdr(basefile):
         elif 'Wave - Sampling rate' in row:
             Instmeta['WaveSampleRate'] = row[38:]
         elif 'Wave - Cell size' in row:
-            Instmeta['WaveCellSize'] = row[38:]
+            idx = row.find(' m')
+            Instmeta['WaveCellSize'] = float(row[38:idx])
         elif 'Analog input 1' in row:
             Instmeta['AQDAnalogInput1'] = row[38:]
         elif 'Analog input 2' in row:
