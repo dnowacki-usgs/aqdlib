@@ -2,8 +2,8 @@
 
 from __future__ import division, print_function
 
-import sys
-sys.path.insert(0, '/Users/dnowacki/Documents/aqdlib')
+# import sys
+# sys.path.insert(0, '/Users/dnowacki/Documents/aqdlib')
 import aqdlib
 import argparse
 import yaml
@@ -25,4 +25,4 @@ config = yaml.safe_load(open(args.config))
 for k in config:
     metadata[k] = config[k]
 
-RAW = aqdlib.wad_to_cdf(metadata['basefile'], metadata)
+aqdlib.wad_to_cdf(metadata['basefile'], metadata)
