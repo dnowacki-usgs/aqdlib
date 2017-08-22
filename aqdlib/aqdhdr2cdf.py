@@ -234,12 +234,25 @@ def define_aqd_cdf_file(cdf_filename, RAW, metadata, waves=False):
         if waves:
             sample = rg.createDimension('sample', N)
 
+        cf_timeid = rg.createVariable('cf_time', 'f8', ('time',), fill_value=False) # 'i' == NC_INT
+        cf_timeid.units = 'seconds since ' + str(RAW['datetime'][0])
+        cf_timeid.standard_name = 'time'
+        cf_timeid.axis = 'T'
+
+        # if waves:
+        #     timeid = rg.createVariable('time', 'i', ('sample', 'time',), fill_value=False) # 'i' == NC_INT
+        # else:
         timeid = rg.createVariable('time', 'i', ('time',), fill_value=False) # 'i' == NC_INT
+        # TODO: make time be for the bursts
         timeid.units = 'True Julian Day'
         timeid.type = 'UNEVEN'
         timeid.epic_code = 624
 
+        # if waves:
+        #     time2id = rg.createVariable('time2', 'i', ('sample', 'time',), fill_value=False) # 'i' == NC_INT
+        # else:
         time2id = rg.createVariable('time2', 'i', ('time',), fill_value=False) # 'i' == NC_INT
+        # TODO: make time be for the bursts
         time2id.units = 'msec since 0:00 GMT'
         time2id.type ='UNEVEN'
         time2id.epic_code = 624
