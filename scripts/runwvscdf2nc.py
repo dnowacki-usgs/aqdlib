@@ -6,7 +6,7 @@ import aqdlib
 import argparse
 import yaml
 
-parser = argparse.ArgumentParser(description='Convert raw Aquadopp .cdf format to processed .nc files')
+parser = argparse.ArgumentParser(description='Convert raw Aquadopp waves .cdf format to processed .nc files')
 parser.add_argument('cdfname', help='raw .CDF filename')
 parser.add_argument('gatts', help='path to global attributes file (gatts formatted)')
 parser.add_argument('config', help='path to ancillary config file (YAML formatted)')
@@ -25,6 +25,6 @@ for k in config:
 
 if args.p_1ac:
     press_ac = aqdlib.load_press_ac('press_ac.cdf', ['p_1ac'])
-    VEL = aqdlib.cdf_to_nc(args.cdfname, metadata, p_1ac=press_ac['p_1ac'])
+    VEL = aqdlib.wvs_cdf_to_nc(args.cdfname, metadata, p_1ac=press_ac['p_1ac'])
 else:
-    VEL = aqdlib.cdf_to_nc(args.cdfname, metadata)
+    VEL = aqdlib.wvs_cdf_to_nc(args.cdfname, metadata)
