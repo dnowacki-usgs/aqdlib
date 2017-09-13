@@ -158,6 +158,8 @@ def define_aqd_nc_file(nc_filename, VEL, metadata, INFO):
         depthid.initial_instrument_height = metadata['initial_instrument_height']
         depthid.nominal_instrument_depth = metadata['nominal_instrument_depth']
 
+        # TODO: figure out how to cast DOUBLE_FILL to float
+        # TODO: why are these created as double precision, when Ellyn says they should be singles?
         bindistid = rg.createVariable('bindist', 'd', ('depth',), zlib=True, fill_value=aqdlib.DOUBLE_FILL)
         # TODO: Loop through the attribute names and values as done in Matlab
         bindistid.blanking_distance = INFO['AQDBlankingDistance']

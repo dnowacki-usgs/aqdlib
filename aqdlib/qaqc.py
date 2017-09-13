@@ -8,13 +8,15 @@ import netCDF4 as nc
 import aqdlib
 import datetime as dt
 
-def load_cdf(cdf_filename, varis):
+def load_cdf(cdf_filename, varis, squeeze_me=False):
     """Load all variables in a cdf file to a dictionary"""
-    
+
     with nc.Dataset(cdf_filename, 'r') as rg:
         RAW = {}
         for var in varis:
             RAW[var] = rg[var][:]
+            if squeeze_me is True:
+                RAW[var] = np.squeeze(RAW[var])
 
         return RAW
 
@@ -64,8 +66,8 @@ def add_min_max(cdf_filename):
         exclude.extend(('time2', 'TIM'))
         for var in rg.variables:
             if var not in exclude:
-                rg[var].minimum = np.nanmin(rg[var][:])
-                rg[var].maximum = np.nanmax(rg[var][:])
+                rg[var].minimum = np.nanmin(rg[var][:]).astype('float32') # cast to float32 (i.e. single) since that is our convention
+                rg[var].maximum = np.nanmax(rg[var][:]).astype('float32')
 
 def plot_inwater(RAW, inwater_time, outwater_time):
     plt.figure(figsize=(12,8))
@@ -223,7 +225,7 @@ def create_water_depth(VEL, metadata):
 
     return VEL, metadata
 
-def trim_vel(VEL, metadata, INFO):
+def trim_vel(VEL, metadata, INFO, waves=False):
     """Trim velocity data depending on specified method"""
 
     N, M = np.shape(VEL['U'])
