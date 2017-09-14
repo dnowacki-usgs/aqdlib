@@ -43,11 +43,13 @@ def save_press_ac(cdf_filename, datetimes, p_1ac):
         timeid[:] = nc.date2num(datetimes, units=timeid.units, calendar=timeid.calendar)
         Pressid[:] = p_1ac
 
-def add_final_metadata(VEL):
+def add_final_metadata(ds):
     # with nc.Dataset(cdf_filename, 'r+') as rg:
         # rg.history = 'Processed to EPIC using aqdlib'
 
-    VEL.attrs.update({'history': 'Processed to EPIC using aqdlib'})
+    ds.attrs.update({'history': 'Processed to EPIC using aqdlib'})
+
+    return ds
 
 def time_time2_to_datetime(time, time2):
     """Create datetime array from time and time2 values"""
@@ -61,18 +63,20 @@ def time_time2_to_datetime(time, time2):
 
     return np.array(times)
 
-def add_min_max(RAW):
-    """Add minimum and maximum values to variables in NC or CDF files"""
+def add_min_max(ds):
+    """
+    Add minimum and maximum values to variables in NC or CDF files
+    This function assumes the data are in xarray DataArrays within Datasets
+    """
 
-    exclude = RAW.dims.keys()
+    exclude = ds.dims.keys()
     exclude.extend(('time2', 'TIM'))
 
-    for k in RAW.keys():
+    for k in ds.keys():
         if k not in exclude:
-            RAW[k].attrs.update({'minimum': RAW[k].min().values, 'maximum': RAW[k].max().values})
+            ds[k].attrs.update({'minimum': ds[k].min().values, 'maximum': ds[k].max().values})
 
-    return RAW
-    # TODO: cast to float32?
+    return ds
 
 def plot_inwater(RAW, inwater_time, outwater_time):
     plt.figure(figsize=(12,8))

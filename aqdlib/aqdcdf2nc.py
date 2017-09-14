@@ -5,9 +5,12 @@ import numpy as np
 import qaqc
 import aqdlib
 
-def cdf_to_nc(cdf_filename, metadata, p_1ac=False):
+def cdf_to_nc(cdf_filename, metadata, atmpres=False):
+    """
+    Load a "raw" .cdf file and generate a processed .nc file
+    """
 
-    VEL = load_cdf(cdf_filename, metadata, p_1ac=p_1ac)
+    VEL = load_cdf(cdf_filename, metadata, atmpres=atmpres)
 
     # Create INFO dict with global attributes from dataset
     INFO = VEL.attrs
@@ -36,17 +39,19 @@ def cdf_to_nc(cdf_filename, metadata, p_1ac=False):
     VEL = qaqc.make_bin_depth(VEL, metadata)
 
     # TODO: Need to add all global attributes from CDF to NC file (or similar)
-    qaqc.add_min_max(VEL)
-    print('Added min/max values')
+    VEL = qaqc.add_min_max(VEL)
 
-    qaqc.add_final_metadata(VEL)
-    print('Added final metadata')
+    VEL = qaqc.add_final_metadata(VEL)
 
     # Reshape and associate dimensions with lat/lon
     for var in ['U', 'V', 'W', 'AGC', 'Pressure', 'Temperature', 'Heading', 'Pitch', 'Roll']:
-        VEL[var] = reshape(VEL[var])
+        VEL[var] = ds_reshape(VEL[var])
 
-    VEL = rename(VEL, metadata, INFO)
+    VEL = ds_rename(VEL, metadata, INFO)
+
+    VEL = ds_drop(VEL, metadata, INFO)
+
+    VEL = ds_add_attrs(VEL, metadata, INFO)
 
     nc_filename = metadata['filename'] + '.nc'
 
@@ -55,13 +60,123 @@ def cdf_to_nc(cdf_filename, metadata, p_1ac=False):
 
     return VEL
 
-def reshape(da):
+def load_cdf(cdf_filename, metadata, atmpres=False):
+
+    ds = xr.open_dataset(cdf_filename, autoclose=True)
+
+    if atmpres is not False:
+        print(atmpres)
+        p = xr.open_dataset(atmpres)
+        print(p)
+        # ds['P_1ac'] = xr.DataArray()
+
+    return ds
+
+def clip_ds(ds, metadata):
+
+    # clip either by ensemble indices or by the deployment and recovery date specified in metadata
+    if 'good_ens' in metadata:
+        # we have good ensemble indices in the metadata
+        print('Using good_ens')
+        S = metadata['good_ens'][0]
+        E = metadata['good_ens'][1]
+
+        print('first burst in full file:', ds['time'].min().values)
+        print('last burst in full file:', ds['time'].max().values)
+
+        ds = ds.isel(time=slice(S,E))
+
+        print('first burst in trimmed file:', ds['time'].min().values)
+        print('last burst in trimmed file:', ds['time'].max().values)
+
+    else:
+        # we clip by the times in/out of water as specified in the metadata
+        print('Using Deployment_date and Recovery_date')
+
+        print('first burst in full file:', ds['time'].min().values)
+        print('last burst in full file:', ds['time'].max().values)
+
+        ds = ds.sel(time=slice(metadata['Deployment_date'], metadata['Recovery_date']))
+
+        print('first burst in trimmed file:', ds['time'].min().values)
+        print('last burst in trimmed file:', ds['time'].max().values)
+
+    return ds
+
+def define_aqd_nc_file(nc_filename, VEL, metadata, INFO):
+
+    print(VEL['bindist'])
+
+    # Assign COMPOSITE global attribute (formerly assigned at end)
+    VEL.attrs.update({'COMPOSITE': 0})
+
+    # VEL['depth'].attrs.update({'epic_code': 3})
+
+    with Dataset(nc_filename, 'w', format='NETCDF4', clobber=True) as rg:
+
+        # time = rg.createDimension('time', 0)
+        # depth = rg.createDimension('depth', M)
+        # lat = rg.createDimension('lat', 1)
+        # lon = rg.createDimension('lon', 1)
+        # Tmatrix = rg.createDimension('Tmatrix', 3)
+        #
+        # timeid = rg.createVariable('time', 'i', ('time',), zlib=True) # 'i' == NC_INT
+        # timeid.units = 'True Julian Day'
+        # timeid.type = 'EVEN' # TODO: this is "UNEVEN" in the CDF version
+        # timeid.epic_code = 624
+        #
+        # time2id = rg.createVariable('time2', 'i', ('time',), zlib=True) # 'i' == NC_INT
+        # time2id.units = 'msec since 0:00 GMT'
+        # time2id.type ='EVEN'
+        # time2id.epic_code = 624
+
+        # TODO: depth seems different from the cdf variable. this is a mean water depth
+        # depthid = rg.createVariable('depth', 'd', ('depth',), zlib=True)
+        # depthid.units = 'm'
+        # depthid.epic_code = 3
+        # depthid.long_name = 'mean water depth'
+        # depthid.initial_instrument_height = metadata['initial_instrument_height']
+        # depthid.nominal_instrument_depth = metadata['nominal_instrument_depth']
+
+        # TODO: figure out how to cast DOUBLE_FILL to float
+        # TODO: why are these created as double precision, when Ellyn says they should be singles?
+        bindistid = rg.createVariable('bindist', 'd', ('depth',), zlib=True, fill_value=aqdlib.DOUBLE_FILL)
+        # TODO: Loop through the attribute names and values as done in Matlab
+        bindistid.blanking_distance = INFO['AQDBlankingDistance']
+        bindistid.initial_instrument_height = metadata['initial_instrument_height']
+        bindistid.note = 'distance is along profile from instrument head to center of bin'
+
+        # TODO: add analog input variables (OBS, NTU, etc)
+
+        bdepid = rg.createVariable('bin_depth', 'd', ('depth', 'lat', 'lon', 'time',), zlib=True, fill_value=aqdlib.DOUBLE_FILL)
+        bdepid.setncattr('name', 'bin depth')
+        bdepid.units = 'm'
+        bdepid.initial_instrument_height = metadata['initial_instrument_height']
+        add_attributes(bdepid, metadata, INFO)
+        if 'press_ac' in VEL:
+            bdepid.note = 'Actual depth time series of velocity bins. Calculated as corrected pressure(P_1ac) - bindist.'
+        else:
+            bdepid.note = 'Actual depth time series of velocity bins. Calculated as pressure(P_1) - bindist.'
+
+        if 'press_ac' in VEL:
+            ACPressid = rg.createVariable('P_1ac', 'd', ('lat', 'lon', 'time',), zlib=True, fill_value=aqdlib.DOUBLE_FILL)
+            ACPressid.units = 'dbar'
+            ACPressid.setncattr('name', 'Pac') # TODO: is Pac correct?
+            ACPressid.long_name = 'CORRECTED PRESSURE (DB)'
+            add_attributes(ACPressid, metadata, INFO)
+            ACPressid.note = 'Corrected for variations in atmospheric pressure using nearby MET station'
+
+def ds_reshape(da):
     """
-    Add lon and lat dimensions to data and reshape to conform to our standard order
+    Add lon and lat dimensions to DataArrays and reshape to conform to our
+    standard order
     """
 
+    # Add the dimensions using concat
     da = xr.concat([da], dim='lon')
     da = xr.concat([da], dim='lat')
+
+    # Reshape using transpose depending on shape
     if len(da.shape) == 4:
         da = da.transpose('time', 'lon', 'lat', 'bindist')
     elif len(da.shape) == 3:
@@ -69,9 +184,41 @@ def reshape(da):
 
     return da
 
-def rename(ds, metadata, INFO):
+def ds_rename(ds, metadata, INFO):
     """
-    Rename DataArrays, drop unused DataArrays, and add attrs
+    Rename DataArrays within Dataset for EPIC compliance
+    """
+
+    varnames = {'U': 'u_1205',
+            'V': 'v_1206',
+            'W': 'w_1204',
+            'AGC': 'AGC_1202',
+            'Pressure': 'P_1',
+            'Temperature': 'Tx_1211',
+            'Heading': 'Hdg_1215',
+            'Pitch': 'Ptch_1216',
+            'Roll': 'Roll_1217'}
+
+    ds.rename(varnames, inplace=True)
+
+    return ds
+
+def ds_drop(ds, metadata, INFO):
+    """
+    Drop old DataArrays from Dataset that won't make it into the final .nc file
+    """
+
+    todrop = ['VEL1', 'VEL2', 'VEL3',
+              'AMP1', 'AMP2', 'AMP3',
+              'Battery', 'TransMatrix', 'AnalogInput1', 'AnalogInput2']
+
+    ds = ds.drop(todrop)
+
+    return ds
+
+def ds_add_attrs(ds, metadata, INFO):
+    """
+    add attrs
     """
 
     def add_vel_attributes(vel, metadata, INFO):
@@ -88,25 +235,6 @@ def rename(ds, metadata, INFO):
             'nominal_instrument_depth': metadata['nominal_instrument_depth'],
             'height_depth_units': 'm', 'sensor_type': INFO['INST_TYPE'],
             '_FillValue': 1e35})
-
-    # Rename DataArrays for EPIC compliance
-    varnames = {'U': 'u_1205',
-            'V': 'v_1206',
-            'W': 'w_1204',
-            'AGC': 'AGC_1202',
-            'Pressure': 'P_1',
-            'Temperature': 'Tx_1211',
-            'Heading': 'Hdg_1215',
-            'Pitch': 'Ptch_1216',
-            'Roll': 'Roll_1217'}
-
-    ds.rename(varnames, inplace=True)
-
-    # Drop old DataArrays
-    todrop = ['VEL1', 'VEL2', 'VEL3',
-              'AMP1', 'AMP2', 'AMP3',
-              'Battery', 'TransMatrix', 'AnalogInput1', 'AnalogInput2']
-    ds = ds.drop(todrop)
 
     # Update attributes for EPIC and STG compliance
     ds['u_1205'].attrs.update({'name': 'u',
@@ -171,107 +299,3 @@ def rename(ds, metadata, INFO):
         add_vel_attributes(ds[v], metadata, INFO)
 
     return ds
-
-def load_cdf(cdf_filename, metadata, p_1ac=False):
-
-    ds = xr.open_dataset(cdf_filename, autoclose=True)
-
-    return ds
-
-def clip_ds(ds, metadata):
-
-    # clip either by ensemble indices or by the deployment and recovery date specified in metadata
-    if 'good_ens' in metadata:
-        # we have good ensemble indices in the metadata
-        print('Using good_ens')
-        S = metadata['good_ens'][0]
-        E = metadata['good_ens'][1]
-
-        print('first burst in full file:', ds['time'].min().values)
-        print('last burst in full file:', ds['time'].max().values)
-
-        ds = ds.isel(time=slice(S,E))
-
-        print('first burst in trimmed file:', ds['time'].min().values)
-        print('last burst in trimmed file:', ds['time'].max().values)
-
-    else:
-        # we clip by the times in/out of water as specified in the metadata
-        print('Using Deployment_date and Recovery_date')
-
-        print('first burst in full file:', ds['time'].min().values)
-        print('last burst in full file:', ds['time'].max().values)
-
-        ds = ds.sel(time=slice(metadata['Deployment_date'], metadata['Recovery_date']))
-
-        print('first burst in trimmed file:', ds['time'].min().values)
-        print('last burst in trimmed file:', ds['time'].max().values)
-
-    return ds
-
-    #     if p_1ac is not False:
-    #         VEL['press_ac'] = p_1ac[S:E]
-    #
-
-def define_aqd_nc_file(nc_filename, VEL, metadata, INFO):
-
-    print(VEL['bindist'])
-
-    # Assign COMPOSITE global attribute (formerly assigned at end)
-    VEL.attrs.update({'COMPOSITE': 0})
-
-    # VEL['depth'].attrs.update({'epic_code': 3})
-
-    with Dataset(nc_filename, 'w', format='NETCDF4', clobber=True) as rg:
-
-        # time = rg.createDimension('time', 0)
-        # depth = rg.createDimension('depth', M)
-        # lat = rg.createDimension('lat', 1)
-        # lon = rg.createDimension('lon', 1)
-        # Tmatrix = rg.createDimension('Tmatrix', 3)
-        #
-        # timeid = rg.createVariable('time', 'i', ('time',), zlib=True) # 'i' == NC_INT
-        # timeid.units = 'True Julian Day'
-        # timeid.type = 'EVEN' # TODO: this is "UNEVEN" in the CDF version
-        # timeid.epic_code = 624
-        #
-        # time2id = rg.createVariable('time2', 'i', ('time',), zlib=True) # 'i' == NC_INT
-        # time2id.units = 'msec since 0:00 GMT'
-        # time2id.type ='EVEN'
-        # time2id.epic_code = 624
-
-        # TODO: depth seems different from the cdf variable. this is a mean water depth
-        # depthid = rg.createVariable('depth', 'd', ('depth',), zlib=True)
-        # depthid.units = 'm'
-        # depthid.epic_code = 3
-        # depthid.long_name = 'mean water depth'
-        # depthid.initial_instrument_height = metadata['initial_instrument_height']
-        # depthid.nominal_instrument_depth = metadata['nominal_instrument_depth']
-
-        # TODO: figure out how to cast DOUBLE_FILL to float
-        # TODO: why are these created as double precision, when Ellyn says they should be singles?
-        bindistid = rg.createVariable('bindist', 'd', ('depth',), zlib=True, fill_value=aqdlib.DOUBLE_FILL)
-        # TODO: Loop through the attribute names and values as done in Matlab
-        bindistid.blanking_distance = INFO['AQDBlankingDistance']
-        bindistid.initial_instrument_height = metadata['initial_instrument_height']
-        bindistid.note = 'distance is along profile from instrument head to center of bin'
-
-        # TODO: add analog input variables (OBS, NTU, etc)
-
-        bdepid = rg.createVariable('bin_depth', 'd', ('depth', 'lat', 'lon', 'time',), zlib=True, fill_value=aqdlib.DOUBLE_FILL)
-        bdepid.setncattr('name', 'bin depth')
-        bdepid.units = 'm'
-        bdepid.initial_instrument_height = metadata['initial_instrument_height']
-        add_attributes(bdepid, metadata, INFO)
-        if 'press_ac' in VEL:
-            bdepid.note = 'Actual depth time series of velocity bins. Calculated as corrected pressure(P_1ac) - bindist.'
-        else:
-            bdepid.note = 'Actual depth time series of velocity bins. Calculated as pressure(P_1) - bindist.'
-
-        if 'press_ac' in VEL:
-            ACPressid = rg.createVariable('P_1ac', 'd', ('lat', 'lon', 'time',), zlib=True, fill_value=aqdlib.DOUBLE_FILL)
-            ACPressid.units = 'dbar'
-            ACPressid.setncattr('name', 'Pac') # TODO: is Pac correct?
-            ACPressid.long_name = 'CORRECTED PRESSURE (DB)'
-            add_attributes(ACPressid, metadata, INFO)
-            ACPressid.note = 'Corrected for variations in atmospheric pressure using nearby MET station'
