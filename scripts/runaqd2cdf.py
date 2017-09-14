@@ -2,6 +2,8 @@
 
 from __future__ import division, print_function
 
+import sys
+sys.path.insert(0, '/Users/dnowacki/Documents/aqdlib')
 import aqdlib
 import argparse
 import yaml

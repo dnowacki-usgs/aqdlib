@@ -9,6 +9,7 @@ import netCDF4
 import aqdlib
 import qaqc
 import pandas as pd
+import xarray as xr
 
 def prf_to_cdf(basefile, metadata):
     """Main load file"""
@@ -40,11 +41,13 @@ def prf_to_cdf(basefile, metadata):
     # TODO: Move time to center of ensemble??
     # TODO: logmeta code
 
-    RAW['instmeta'] = instmeta
+    # FIXME
+    metadata['instmeta'] = instmeta
 
     # Put in fill values
     print("about to insert fill values")
-    RAW = insert_fill_values(RAW)
+    # FIXME
+    # RAW = insert_fill_values(RAW)
 
     # configure file
     cdf_filename = metadata['filename'] + '-raw.cdf' # TODO: fix the path
@@ -53,6 +56,8 @@ def prf_to_cdf(basefile, metadata):
     define_aqd_cdf_file(cdf_filename, RAW, metadata)
     print('Variables created')
 
+    print(RAW)
+
     write_aqd_cdf_data(cdf_filename, RAW, metadata)
     print('Variables written')
 
@@ -60,17 +65,6 @@ def prf_to_cdf(basefile, metadata):
     print('Adding min/max values')
 
     print('Finished writing data to %s' % cdf_filename)
-
-    return RAW
-
-def insert_fill_values(RAW):
-    """Insert fill values for nans"""
-
-    print("Inserting fill values")
-    for k in RAW:
-        if k not in ['instmeta', 'time', 'time2', 'datetime'] and np.max(np.shape(RAW[k])) == np.max(np.shape(RAW['jd'])):
-            nanind = np.where(np.isnan(RAW[k]))
-            RAW[k][nanind] = aqdlib.DOUBLE_FILL
 
     return RAW
 
@@ -83,23 +77,30 @@ def check_orientation(RAW, metadata, waves=False):
     print('bin_count = %f' % metadata['bin_count'])
     # TODO: these values are already in the HDR file...
     if not waves:
-        RAW['bindist'] = np.linspace(metadata['center_first_bin'],
+        bindist = np.linspace(metadata['center_first_bin'],
                                      (metadata['center_first_bin'] + ((metadata['bin_count'] - 1) * metadata['bin_size'])),
                                      num=metadata['bin_count'])
     else:
-        RAW['bindist'] = RAW['cellpos'][0]
+        bindist = RAW['cellpos'][0]
 
 
     if metadata['orientation'] == 'UP':
         print('User instructed that instrument was pointing UP')
         # depth, or distance below surface, is a positive number below the
         # surface, negative above the surface, for CMG purposes and consistency with ADCP
-        RAW['Depths'] = (metadata['WATER_DEPTH'] - metadata['transducer_offset_from_bottom']) - RAW['bindist']
+        depth = (metadata['WATER_DEPTH'] - metadata['transducer_offset_from_bottom']) - bindist
         Depth_NOTE = 'user reports uplooking bin depths = water_depth - transducer offset from bottom - bindist' # TODO: this is never used
     elif metadata['orientation'] == 'DOWN':
         print('User instructed that instrument was pointing DOWN')
-        RAW['Depths'] = (metadata['WATER_DEPTH'] - metadata['transducer_offset_from_bottom']) + RAW['bindist']
+        depth = (metadata['WATER_DEPTH'] - metadata['transducer_offset_from_bottom']) + bindist
         Depth_NOTE = 'user reports downlooking bin depths = water_depth - transducer_offset_from_bottom + bindist' # TODO: this is never used
+
+    RAW['bindist'] = xr.DataArray(bindist, dims=('bindist'), name='bindist')
+
+    RAW['depth'] = xr.DataArray(depth, dims=('depth'), name='depth',
+        attrs={'units': 'm', 'long_name': 'mean water depth',
+        'bin_size': metadata['bin_size'], 'center_first_bin': metadata['center_first_bin'],
+        'bin_count': metadata['bin_count'], 'transducer_offset_from_bottom': metadata['transducer_offset_from_bottom']})
 
     return RAW
 
@@ -160,47 +161,8 @@ def write_aqd_cdf_data(cdf_filename, RAW, metadata, waves=False):
     """
     with Dataset(cdf_filename, 'r+') as rg:
 
-        print (rg['cf_time'].units)
-        rg['lat'][:] = metadata['latitude']
-        rg['lon'][:] = metadata['longitude']
         # TODO: not too comfortable with this hack that removes TZ info...
         timenaive = [x.replace(tzinfo=None) for x in RAW['datetime']]
-        rg['cf_time'][:] = netCDF4.date2num(timenaive, rg['cf_time'].units)
-        rg['time'][:] = RAW['time']
-        rg['time2'][:] = RAW['time2']
-        rg['depth'][:] = RAW['Depths']
-        rg['bindist'][:] = RAW['bindist']
-
-        if not waves:
-            print('rg shape:', np.shape(rg['VEL1'][:]))
-            print('V1 shape:', np.shape(RAW['V1']))
-            rg['VEL1'][:] = RAW['V1'].T
-            rg['VEL2'][:] = RAW['V2'].T
-            rg['VEL3'][:] = RAW['V3'].T
-
-            rg['AMP1'][:] = RAW['AMP1'].T
-            rg['AMP2'][:] = RAW['AMP2'].T
-            rg['AMP3'][:] = RAW['AMP3'].T
-        else:
-            print('rg shape:', np.shape(rg['VEL1'][:]))
-            print('VEL1 shape:', np.shape(RAW['VEL1']))
-            rg['VEL1'][:] = RAW['VEL1']
-            rg['VEL2'][:] = RAW['VEL2']
-            rg['VEL3'][:] = RAW['VEL3']
-
-            rg['AMP1'][:] = RAW['AMP1']
-            rg['AMP2'][:] = RAW['AMP2']
-            rg['AMP3'][:] = RAW['AMP3']
-
-        rg['Temperature'][:] = RAW['temperature']
-        print('rg shape:', np.shape(rg['Pressure'][:]))
-        print('V1 shape:', np.shape(RAW['pressure']))
-        rg['Pressure'][:] = RAW['pressure']
-        rg['Battery'][:] = RAW['battery']
-
-        rg['Pitch'][:] = RAW['pitch']
-        rg['Roll'][:] = RAW['roll']
-        rg['Heading'][:] = RAW['heading']
 
         rg['TransMatrix'][:] = RAW['instmeta']['AQDTransMatrix']
 
@@ -213,231 +175,126 @@ def write_aqd_cdf_data(cdf_filename, RAW, metadata, waves=False):
 def define_aqd_cdf_file(cdf_filename, RAW, metadata, waves=False):
     """Define dimensions and variables in NetCDF file"""
 
-    with Dataset(cdf_filename, 'w', format='NETCDF4', clobber=True) as rg:
+    RAW = write_metadata(RAW, metadata)
 
-        # write out EPIC metadata
-        write_metadata(rg, metadata)
-        write_metadata(rg, RAW['instmeta'])
+    RAW['lat'] = xr.DataArray([metadata['latitude']], dims=('lat'), name='lat',
+        attrs={'units': 'degrees_north', 'long_name': 'Latitude', 'epic_code': 500})
+    RAW['lon'] = xr.DataArray([metadata['longitude']], dims=('lon'), name='lon',
+        attrs={'units': 'degrees_east', 'long_name': 'Longitude', 'epic_code': 502})
 
-        if not waves:
-            N, M = np.shape(RAW['V1'])
-        else:
-            N, M = np.shape(RAW['VEL1'])
-        print('N:', N, 'M:', M, 'in define_aqd_cdf_file')
+    # FIXME: make a proper transformation matrix
+    RAW['TransMatrix'] = xr.DataArray(metadata['instmeta']['AQDTransMatrix'], dims=('Tmatrix', 'Tmatrix'), name='TransMatrix')
+    RAW['time'].attrs.update({'standard_name': 'time', 'axis': 'T'})
 
-        # Time is the record dimension
-        time = rg.createDimension('time', 0)
-        depth = rg.createDimension('depth', M)
-        lat = rg.createDimension('lat', 1)
-        lon = rg.createDimension('lon', 1)
-        Tmatrix = rg.createDimension('Tmatrix', 3)
-        if waves:
-            sample = rg.createDimension('sample', N)
+    RAW['bindist'].attrs.update({'units': 'm', 'long_name': 'distance from transducer head',
+        'bin_size': metadata['bin_size'], 'center_first_bin': metadata['center_first_bin'],
+        'bin_count': metadata['bin_count'], 'transducer_offset_from_bottom': metadata['transducer_offset_from_bottom']})
 
-        cf_timeid = rg.createVariable('cf_time', 'f8', ('time',), fill_value=False) # 'i' == NC_INT
-        cf_timeid.units = 'seconds since ' + str(RAW['datetime'][0])
-        cf_timeid.standard_name = 'time'
-        cf_timeid.axis = 'T'
+    RAW['Temperature'].attrs.update({'units': 'C', 'long_name': 'Temperature', 'generic_name': 'temp'})
 
-        # if waves:
-        #     timeid = rg.createVariable('time', 'i', ('sample', 'time',), fill_value=False) # 'i' == NC_INT
-        # else:
-        timeid = rg.createVariable('time', 'i', ('time',), fill_value=False) # 'i' == NC_INT
-        # TODO: make time be for the bursts
-        timeid.units = 'True Julian Day'
-        timeid.type = 'UNEVEN'
-        timeid.epic_code = 624
+    RAW['Pressure'].attrs.update({'units': 'dbar', 'long_name': 'Pressure', 'generic_name': 'press',
+        'note': 'raw pressure from instrument, not corrected for changes in atmospheric pressure'})
 
-        # if waves:
-        #     time2id = rg.createVariable('time2', 'i', ('sample', 'time',), fill_value=False) # 'i' == NC_INT
-        # else:
-        time2id = rg.createVariable('time2', 'i', ('time',), fill_value=False) # 'i' == NC_INT
-        # TODO: make time be for the bursts
-        time2id.units = 'msec since 0:00 GMT'
-        time2id.type ='UNEVEN'
-        time2id.epic_code = 624
+    for n in [1, 2, 3]:
+        RAW['VEL' + str(n)].attrs.update({'units': 'cm/s', 'Type': 'scalar',
+            'transducer_offset_from_bottom': metadata['transducer_offset_from_bottom']})
+        RAW['AMP' + str(n)].attrs.update({'long_name': 'Beam ' + str(n) + ' Echo Amplitude',
+            'units': 'counts', 'Type': 'scalar', 'transducer_offset_from_bottom': metadata['transducer_offset_from_bottom'] })
 
-        latid = rg.createVariable('lat', 'f', ('lat',), fill_value=False)
-        latid.units = 'degree_north'
-        latid.type = 'EVEN'
-        latid.epic_code = 500
-        latid.minimum = aqdlib.DOUBLE_FILL
-        latid.maximum = aqdlib.DOUBLE_FILL
+    if metadata['instmeta']['AQDCoordinateSystem'] == 'ENU':
+        RAW['VEL1'].attrs.update({'long_name': 'Eastward current velocity'})
+        RAW['VEL2'].attrs.update({'long_name': 'Northward current velocity'})
+        RAW['VEL3'].attrs.update({'long_name': 'Vertical current velocity'})
+    elif metadata['instmeta']['AQDCoordinateSystem'] == 'XYZ':
+        RAW['VEL1'].attrs.update({'long_name': 'Current velocity in X Direction'})
+        RAW['VEL2'].attrs.update({'long_name': 'Current velocity in Y Direction'})
+        RAW['VEL3'].attrs.update({'long_name': 'Current velocity in Z Direction'})
+    elif metadata['instmeta']['AQDCoordinateSystem'] == 'BEAM':
+        RAW['VEL1'].attrs.update({'long_name': 'Beam 1 current velocity'})
+        RAW['VEL2'].attrs.update({'long_name': 'Beam 2 current velocity'})
+        RAW['VEL3'].attrs.update({'long_name': 'Beam 3 current velocity'})
 
-        lonid = rg.createVariable('lon', 'f', ('lon',), fill_value=False)
-        lonid.units = 'degree_east'
-        lonid.type = 'EVEN'
-        lonid.epic_code = 502
-        lonid.minimum = aqdlib.DOUBLE_FILL
-        lonid.maximum = aqdlib.DOUBLE_FILL
+    RAW['Battery'].attrs.update({'units': 'Volts', 'long_name': 'Battery Voltage'})
+    RAW['Pitch'].attrs.update({'units': 'degrees', 'long_name': 'Instrument Pitch'})
+    RAW['Roll'].attrs.update({'units': 'degrees', 'long_name': 'Instrument Roll'})
+    RAW['Heading'].attrs.update({'units': 'degrees', 'long_name': 'Instrument Heading', 'datum': 'magnetic north'})
+    RAW['TransMatrix'].attrs.update({'long_name': 'Transformation Matrix for this Aquadopp'})
 
-        depthid = rg.createVariable('depth', 'f', ('depth',), fill_value=False)
-        depthid.units = 'm'
-        depthid.long_name = 'mean water depth'
-        depthid.bin_size = metadata['bin_size']
-        depthid.center_first_bin = metadata['center_first_bin']
-        depthid.bin_count = metadata['bin_count']
-        depthid.transducer_offset_from_bottom = metadata['transducer_offset_from_bottom']
 
-        if waves:
-            burstid = rg.createVariable('burst', 'i', ('time',), fill_value=False)
-            burstid.units = 'count'
-            burstid.long_name = 'Record Number'
 
-        bindistid = rg.createVariable('bindist', 'f', ('depth',), fill_value=False)
-        bindistid.units = 'm'
-        bindistid.long_name = 'distance from transducer head'
-        bindistid.bin_size = metadata['bin_size']
-        bindistid.center_first_bin = metadata['center_first_bin']
-        bindistid.bin_count = metadata['bin_count']
-        bindistid.transducer_offset_from_bottom = metadata['transducer_offset_from_bottom']
 
-        Tempid = rg.createVariable('Temperature', 'f', ('time',), fill_value=False)
-        Tempid.units = 'C'
-        Tempid.long_name = 'TEMPERATURE (C)'
-        Tempid.generic_name = 'temp'
+    # with Dataset(cdf_filename, 'w', format='NETCDF4', clobber=True) as rg:
+    #
+    #     # write out EPIC metadata
+    #     write_metadata(rg, RAW['instmeta']) #TODO
+    #
+    #     if waves:
+    #         burstid = rg.createVariable('burst', 'i', ('time',), fill_value=False)
+    #         burstid.units = 'count'
+    #         burstid.long_name = 'Record Number'
+    #
+    #
+    #
+    #     if waves:
+    #         AMP1id = rg.createVariable('AMP1', 'f', ('sample', 'time',), fill_value=False)
+    #     else:
+    #         AMP1id = rg.createVariable('AMP1', 'f', ('depth', 'time',), fill_value=False)
+    #
+    # FIXME: add analoginput stuff
+    #     for n in ['1', '2']:
+    #         if 'AnalogInput' + n in metadata:
+    #             Anaid = rg.createVariable('AnalogInput' + n, 'f', ('time',), fill_value=False)
+    #             Anaid.units = 'Volts'
+    #             Anaid.sensor_type = metadata['AnalogInput1']['sensor_type']
+    #             Anaid.sensor_manufacturer = metadata['AnalogInput1']['sensor_manufacturer']
+    #             Anaid.sensor_model = metadata['AnalogInput1']['sensor_model']
+    #             Anaid.serial_number = metadata['AnalogInput1']['serial_number']
+    #
+    #             if 'initial_sensor_height' in metadata['AnalogInput' + n]:
+    #                 # TODO
+    #                 # metadata.AnalogInput1.nominal_sensor_depth = metadata.WATER_DEPTH - metadata.AnalogInput1.initial_sensor_height;
+    #                 # netcdf.putAtt(ncid,Ana1id,'initial_sensor_height',metadata.AnalogInput1.initial_sensor_height);
+    #                 # netcdf.putAtt(ncid,Ana1id,'nominal_sensor_depth',metadata.AnalogInput1.nominal_sensor_depth);
+    #                 continue
+    #             elif 'nominal_sensor_depth' in metadata['AnalogInput' + n]: # TODO: should be another if not elif??
+    #                 # netcdf.putAtt(ncid,Ana1id,'nominal_sensor_depth',metadata.AnalogInput1.nominal_sensor_depth);
+    #                 # metadata.AnalogInput1.initial_sensor_height = metadata.WATER_DEPTH - metadata.AnalogInput1.nominal_sensor_depth;
+    #                 # netcdf.putAtt(ncid,Ana1id,'initial_sensor_height',metadata.AnalogInput1.initial_sensor_height);
+    #                 continue
+    #
+    #         # if isfield(metadata.AnalogInput1,'range'),
+    #         #         netcdf.putAtt(ncid,Ana1id,'range',metadata.AnalogInput1.range);
+    #         # end
+    #         # if isfield(metadata.AnalogInput1.cals,'NTUcoef'),
+    #         #         netcdf.putAtt(ncid,Ana1id,'NTUcoef',metadata.AnalogInput1.cals.NTUcoef);
+    #         # end
+    #         # if isfield(metadata.AnalogInput1.cals,'SEDcoef'),
+    #         #         netcdf.putAtt(ncid,Ana1id,'SEDcoef',metadata.AnalogInput1.cals.SEDcoef);
+    #         # end
 
-        if waves:
-            Pressid = rg.createVariable('Pressure', 'f', ('sample', 'time',), fill_value=False)
-        else:
-            Pressid = rg.createVariable('Pressure', 'f', ('time',), fill_value=False)
-        Pressid.units = 'dbar'
-        Pressid.long_name = 'Pressure (dbar)'
-        Pressid.generic_name = 'press'
-        Pressid.note = 'raw pressure from instrument, not corrected for changes in atmospheric pressure'
-
-        if waves:
-            VEL1id = rg.createVariable('VEL1', 'f', ('sample', 'time',), fill_value=False)
-        else:
-            VEL1id = rg.createVariable('VEL1', 'f', ('depth', 'time',), fill_value=False)
-        VEL1id.units = 'cm/s'
-        VEL1id.Type = 'scalar'
-        VEL1id.transducer_offset_from_bottom = metadata['transducer_offset_from_bottom']
-
-        if waves:
-            VEL2id = rg.createVariable('VEL2', 'f', ('sample', 'time',), fill_value=False)
-        else:
-            VEL2id = rg.createVariable('VEL2', 'f', ('depth', 'time',), fill_value=False)
-        VEL2id.units = 'cm/s'
-        VEL2id.Type = 'scalar'
-        VEL2id.transducer_offset_from_bottom = metadata['transducer_offset_from_bottom']
-
-        if waves:
-            VEL3id = rg.createVariable('VEL3', 'f', ('sample', 'time',), fill_value=False)
-        else:
-            VEL3id = rg.createVariable('VEL3', 'f', ('depth', 'time',), fill_value=False)
-        VEL3id.units = 'cm/s'
-        VEL3id.Type = 'scalar'
-        VEL3id.transducer_offset_from_bottom = metadata['transducer_offset_from_bottom']
-
-        if RAW['instmeta']['AQDCoordinateSystem'] == 'ENU':
-            VEL1id.long_name = 'Eastward current velocity'
-            VEL2id.long_name = 'Northward current velocity'
-            VEL3id.long_name = 'Vertical current velocity'
-        elif RAW['instmeta']['AQDCoordinateSystem'] == 'XYZ':
-            VEL1id.long_name = 'Current velocity in X Direction'
-            VEL2id.long_name = 'Current velocity in Y Direction'
-            VEL3id.long_name = 'Current velocity in Z Direction'
-        elif RAW['instmeta']['AQDCoordinateSystem'] == 'BEAM':
-            VEL1id.long_name = 'Beam 1 current velocity'
-            VEL2id.long_name = 'Beam 2 current velocity'
-            VEL3id.long_name = 'Beam 3 current velocity'
-
-        if waves:
-            AMP1id = rg.createVariable('AMP1', 'f', ('sample', 'time',), fill_value=False)
-        else:
-            AMP1id = rg.createVariable('AMP1', 'f', ('depth', 'time',), fill_value=False)
-        AMP1id.long_name = 'Beam 1 Echo Amplitude'
-        AMP1id.units = 'counts'
-        AMP1id.Type = 'scalar'
-        AMP1id.transducer_offset_from_bottom = metadata['transducer_offset_from_bottom']
-
-        if waves:
-            AMP2id = rg.createVariable('AMP2', 'f', ('sample', 'time',), fill_value=False)
-        else:
-            AMP2id = rg.createVariable('AMP2', 'f', ('depth', 'time',), fill_value=False)
-        AMP2id.long_name = 'Beam 2 Echo Amplitude'
-        AMP2id.units = 'counts'
-        AMP2id.Type = 'scalar'
-        AMP2id.transducer_offset_from_bottom = metadata['transducer_offset_from_bottom']
-
-        if waves:
-            AMP3id = rg.createVariable('AMP3', 'f', ('sample', 'time',), fill_value=False)
-        else:
-            AMP3id = rg.createVariable('AMP3', 'f', ('depth', 'time',), fill_value=False)
-        AMP3id.long_name = 'Beam 3 Echo Amplitude'
-        AMP3id.units = 'counts'
-        AMP3id.Type = 'scalar'
-        AMP3id.transducer_offset_from_bottom = metadata['transducer_offset_from_bottom']
-
-        Battid = rg.createVariable('Battery', 'f', ('time',), fill_value=False)
-        Battid.units = 'Volts'
-        Battid.long_name = 'Battery Voltage'
-
-        Pitchid = rg.createVariable('Pitch', 'f', ('time',), fill_value=False)
-        Pitchid.units = 'degrees'
-        Pitchid.long_name = 'Instrument Pitch'
-
-        Rollid  = rg.createVariable('Roll', 'f', ('time',), fill_value=False)
-        Rollid.units = 'degrees'
-        Rollid.long_name = 'Instrument Roll'
-
-        Headid  = rg.createVariable('Heading', 'f', ('time',), fill_value=False)
-        Headid.units = 'degrees'
-        Headid.long_name = 'Instrument Heading'
-        Headid.datum = 'magnetic north'
-
-        Tmatid = rg.createVariable('TransMatrix', 'f', ('Tmatrix', 'Tmatrix',), fill_value=False)
-        Tmatid.long_name = 'Transformation Matrix for this Aquadopp'
-
-        for n in ['1', '2']:
-            if 'AnalogInput' + n in metadata:
-                Anaid = rg.createVariable('AnalogInput' + n, 'f', ('time',), fill_value=False)
-                Anaid.units = 'Volts'
-                Anaid.sensor_type = metadata['AnalogInput1']['sensor_type']
-                Anaid.sensor_manufacturer = metadata['AnalogInput1']['sensor_manufacturer']
-                Anaid.sensor_model = metadata['AnalogInput1']['sensor_model']
-                Anaid.serial_number = metadata['AnalogInput1']['serial_number']
-
-                if 'initial_sensor_height' in metadata['AnalogInput' + n]:
-                    # TODO
-                    # metadata.AnalogInput1.nominal_sensor_depth = metadata.WATER_DEPTH - metadata.AnalogInput1.initial_sensor_height;
-                    # netcdf.putAtt(ncid,Ana1id,'initial_sensor_height',metadata.AnalogInput1.initial_sensor_height);
-                    # netcdf.putAtt(ncid,Ana1id,'nominal_sensor_depth',metadata.AnalogInput1.nominal_sensor_depth);
-                    continue
-                elif 'nominal_sensor_depth' in metadata['AnalogInput' + n]: # TODO: should be another if not elif??
-                    # netcdf.putAtt(ncid,Ana1id,'nominal_sensor_depth',metadata.AnalogInput1.nominal_sensor_depth);
-                    # metadata.AnalogInput1.initial_sensor_height = metadata.WATER_DEPTH - metadata.AnalogInput1.nominal_sensor_depth;
-                    # netcdf.putAtt(ncid,Ana1id,'initial_sensor_height',metadata.AnalogInput1.initial_sensor_height);
-                    continue
-
-            # if isfield(metadata.AnalogInput1,'range'),
-            #         netcdf.putAtt(ncid,Ana1id,'range',metadata.AnalogInput1.range);
-            # end
-            # if isfield(metadata.AnalogInput1.cals,'NTUcoef'),
-            #         netcdf.putAtt(ncid,Ana1id,'NTUcoef',metadata.AnalogInput1.cals.NTUcoef);
-            # end
-            # if isfield(metadata.AnalogInput1.cals,'SEDcoef'),
-            #         netcdf.putAtt(ncid,Ana1id,'SEDcoef',metadata.AnalogInput1.cals.SEDcoef);
-            # end
-
-def write_metadata(rg, metadata):
+def write_metadata(ds, metadata):
     """Write out all metadata to CDF file"""
 
-    for k in metadata.keys():
-        setattr(rg, k, metadata[k])
+    # for k in metadata.keys():
+    #     setattr(rg, k, metadata[k])
+
+    for k in metadata:
+        ds.attrs.update({k: metadata[k]})
+
+    return ds
 
 def compute_time(RAW, instmeta):
     """Compute Julian date and then time and time2 for use in NetCDF file"""
 
+    # FIXME: need to shift
     # shift times to center of ensemble
-    RAW['datetime'] = RAW['datetime'] + dt.timedelta(seconds=instmeta['AQDAverageInterval']/2)
+    # RAW['time'] = RAW['time'] + dt.timedelta(seconds=instmeta['AQDAverageInterval']/2)
 
-    RAW['jd'] = np.array([qaqc.julian(t) for t in RAW['datetime']])
-
-    RAW['time'] = np.floor(RAW['jd'])
-    # TODO: Hopefully this is correct... roundoff errors on big numbers...
-    RAW['time2'] = (RAW['jd'] - np.floor(RAW['jd']))*86400000
+    # RAW['jd'] = np.array([qaqc.julian(t) for t in RAW['datetime']])
+    #
+    # RAW['time'] = np.floor(RAW['jd'])
+    # # TODO: Hopefully this is correct... roundoff errors on big numbers...
+    # RAW['time2'] = (RAW['jd'] - np.floor(RAW['jd']))*86400000
 
     return RAW
 
@@ -445,25 +302,26 @@ def load_sen(RAW, basefile, metadata):
     """Load data from .sen file"""
 
     senfile = basefile + '.sen'
-    SEN = pd.read_csv(senfile, header=None, delim_whitespace=True).values
 
-    RAW['heading'] = SEN[:,10]
-    RAW['pitch'] = SEN[:,11]
-    RAW['roll'] = SEN[:,12];
-    RAW['pressure'] = SEN[:,13]
-    RAW['temperature'] = SEN[:,14]
-    RAW['battery'] = SEN[:,8]
-    RAW['datetime'] = []
-    for year, month, day, hour, minute, second in zip(SEN[:,2], SEN[:,0], SEN[:,1], SEN[:,3], SEN[:,4], SEN[:,5]):
-        RAW['datetime'].append(dt.datetime(int(year), int(month), int(day), int(hour), int(minute), int(second), tzinfo=pytz.utc))
-    RAW['datetime'] = np.array(RAW['datetime'])
+    # https://stackoverflow.com/questions/27112591/parsing-year-month-day-hour-minute-second-in-python
+    def parse(year, month, day, hour, minute, second):
+        return year + '-' + month + '-' + day + ' ' + hour + ':' + minute + ':' + second
 
-    # Look for analog data
-    if 'AnalogInput1' in metadata:
-        RAW['AnaInp1'] = SEN[:,15] * 5 / 65535
+    SEN = pd.read_csv(senfile, header=None, delim_whitespace=True,
+        parse_dates={'datetime': [2, 0, 1, 3, 4, 5]}, date_parser=parse, usecols=[0, 1, 2, 3, 4, 5, 8, 10, 11, 12, 13, 14, 15, 16])
 
-    if 'AnalogInput2' in metadata:
-        RAW['AnaInp2'] = SEN[:,16] * 5 / 65535
+    SEN.rename(columns={10: 'Heading', 11: 'Pitch', 12: 'Roll', 13:'Pressure', 14:'Temperature', 8: 'Battery'}, inplace=True)
+
+    # Look for analog data TODO
+
+    SEN.rename(columns={15: 'AnaInp1'}, inplace=True)
+    SEN['AnaInp1'] = SEN['AnaInp1'] * 5 / 65535
+    SEN.rename(columns={16: 'AnaInp2'}, inplace=True)
+    SEN['AnaInp2'] = SEN['AnaInp2'] * 5 / 65535
+
+    RAW = xr.Dataset.from_dataframe(SEN)
+    RAW = RAW.rename({'index': 'time'})
+    RAW['time'] = RAW['datetime']
 
     return RAW
 
@@ -472,11 +330,12 @@ def load_amp_vel(RAW, basefile):
 
     for n in [1, 2, 3]:
         afile = basefile + '.a' + str(n)
-        RAW['AMP' + str(n)] = pd.read_csv(afile, header=None, delim_whitespace=True).values
+        RAW['AMP' + str(n)] = xr.DataArray(pd.read_csv(afile, header=None, delim_whitespace=True), dims=('time', 'bindist'), coords=[RAW['time'], np.arange(30)])
+        # RAW['AMP' + str(n)] = RAW['AMP' + str(n)].rename({'dim_0': 'time'})
         vfile = basefile + '.v' + str(n)
-        RAW['Vvel' + str(n)] = pd.read_csv(vfile, header=None, delim_whitespace=True).values
+        v = pd.read_csv(vfile, header=None, delim_whitespace=True)
         # convert to cm/s
-        RAW['V' + str(n)] = RAW['Vvel' + str(n)] * 100
+        RAW['VEL' + str(n)] = xr.DataArray(v * 100, dims=('time', 'bindist'), coords=[RAW['time'], np.arange(30)])
 
     return RAW
 
@@ -639,3 +498,14 @@ def read_aqd_hdr(basefile):
 # % end
 
     return Instmeta
+
+def insert_fill_values(RAW):
+    """Insert fill values for nans"""
+
+    print("Inserting fill values")
+    for k in RAW:
+        if k not in ['instmeta', 'time', 'time2', 'datetime'] and np.max(np.shape(RAW[k])) == np.max(np.shape(RAW['jd'])):
+            nanind = np.where(np.isnan(RAW[k]))
+            RAW[k][nanind] = aqdlib.DOUBLE_FILL
+
+    return RAW
