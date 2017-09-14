@@ -7,6 +7,7 @@ import jdcal
 import netCDF4 as nc
 import aqdlib
 import datetime as dt
+import xarray as xr
 
 def load_cdf(cdf_filename, varis, squeeze_me=False):
     """Load all variables in a cdf file to a dictionary"""
@@ -42,9 +43,11 @@ def save_press_ac(cdf_filename, datetimes, p_1ac):
         timeid[:] = nc.date2num(datetimes, units=timeid.units, calendar=timeid.calendar)
         Pressid[:] = p_1ac
 
-def add_final_metadata(cdf_filename):
-    with nc.Dataset(cdf_filename, 'r+') as rg:
-        rg.history = 'Processed to EPIC using aqdlib'
+def add_final_metadata(VEL):
+    # with nc.Dataset(cdf_filename, 'r+') as rg:
+        # rg.history = 'Processed to EPIC using aqdlib'
+
+    VEL.attrs.update({'history': 'Processed to EPIC using aqdlib'})
 
 def time_time2_to_datetime(time, time2):
     """Create datetime array from time and time2 values"""
@@ -58,16 +61,18 @@ def time_time2_to_datetime(time, time2):
 
     return np.array(times)
 
-def add_min_max(cdf_filename):
+def add_min_max(RAW):
     """Add minimum and maximum values to variables in NC or CDF files"""
 
-    with nc.Dataset(cdf_filename, 'r+') as rg:
-        exclude = rg.dimensions.keys()
-        exclude.extend(('time2', 'TIM'))
-        for var in rg.variables:
-            if var not in exclude:
-                rg[var].minimum = np.nanmin(rg[var][:]).astype('float32') # cast to float32 (i.e. single) since that is our convention
-                rg[var].maximum = np.nanmax(rg[var][:]).astype('float32')
+    exclude = RAW.dims.keys()
+    exclude.extend(('time2', 'TIM'))
+
+    for k in RAW.keys():
+        if k not in exclude:
+            RAW[k].attrs.update({'minimum': RAW[k].min().values, 'maximum': RAW[k].max().values})
+
+    return RAW
+    # TODO: cast to float32?
 
 def plot_inwater(RAW, inwater_time, outwater_time):
     plt.figure(figsize=(12,8))
@@ -131,12 +136,12 @@ def coord_transform(vel1, vel2, vel3, heading, pitch, roll, T, cs):
 def set_orientation(VEL, T, metadata, INFO):
     # TODO: this code seems too complicated. also should we really be modifying the trans matrix?
 
-    N, M = np.shape(VEL['U'])
+    N, M = np.shape(VEL['VEL1'])
 
     if 'press_ac' in VEL:
         Wdepth = np.nanmean(VEL['press_ac']) + INFO['transducer_offset_from_bottom']
     else:
-        Wdepth = np.nanmean(VEL['pressure']) + INFO['transducer_offset_from_bottom']
+        Wdepth = np.nanmean(VEL['Pressure']) + INFO['transducer_offset_from_bottom']
 
     blank2 = INFO['AQDBlankingDistance'] + INFO['transducer_offset_from_bottom']
     binn = INFO['bin_size']
@@ -160,9 +165,11 @@ def make_bin_depth(VEL, metadata):
     N, M = np.shape(VEL['U'])
 
     if 'press_ac' in VEL:
-        VEL['bin_depth'] = np.tile(VEL['press_ac'], (M, 1)) - np.tile(VEL['bindist'], (N, 1)).T;
+        # VEL['bin_depth'] = np.tile(VEL['press_ac'], (M, 1)) - np.tile(VEL['bindist'], (N, 1)).T;
+        VEL['bin_depth'] = VEL['press_ac'] - VEL['bindist']
     else:
-        VEL['bin_depth'] = np.tile(VEL['pressure'], (M, 1)) - np.tile(VEL['bindist'], (N, 1)).T;
+        # VEL['bin_depth'] = np.tile(VEL['Pressure'], (M, 1)) - np.tile(VEL['bindist'], (N, 1)).T;
+        VEL['bin_depth'] = VEL['Pressure'] - VEL['bindist']
 
     return VEL
 
@@ -179,9 +186,9 @@ def magvar_correct(VEL, metadata):
 
     print('Rotating heading by %f degrees' % magvardeg)
 
-    VEL['heading'] = VEL['heading'] + magvardeg
-    VEL['heading'][VEL['heading'] >= 360] = VEL['heading'][VEL['heading'] >= 360] - 360
-    VEL['heading'][VEL['heading'] < 0] = VEL['heading'][VEL['heading'] < 0] + 360
+    VEL['Heading'] = VEL['Heading'] + magvardeg
+    VEL['Heading'][VEL['Heading'] >= 360] = VEL['Heading'][VEL['Heading'] >= 360] - 360
+    VEL['Heading'][VEL['Heading'] < 0] = VEL['Heading'][VEL['Heading'] < 0] + 360
 
     vel1 = VEL['U'].copy()
     vel2 = VEL['V'].copy()
@@ -234,50 +241,30 @@ def trim_vel(VEL, metadata, INFO, waves=False):
         print('Using atmospherically corrected pressure to trim')
         WL = VEL['press_ac'] + INFO['transducer_offset_from_bottom']
     else:
+        # FIXME incorporate press_ ac below
         print('Using NON-atmospherically corrected pressure to trim')
-        WL = VEL['pressure'] + INFO['transducer_offset_from_bottom']
+        WL = VEL['Pressure'] + INFO['transducer_offset_from_bottom']
 
 
     if 'trim_method' in metadata:
-        blank = INFO['AQDBlankingDistance'] + INFO['transducer_offset_from_bottom'] # TODO: check this logic
-        binn = INFO['bin_size']
-        binc = INFO['bin_count']
         if metadata['trim_method'].lower() == 'water level' or metadata['trim_method'].lower() == 'water level sl':
             print('User instructed to trim data at the surface using pressure data')
+
             if metadata['trim_method'].lower() == 'water level':
                 print('Trimming using water level')
-                dist2 = np.linspace(blank + binn/2, (binn * (M-1)) + blank + binn/2, num=binc)
+                for var in ['U', 'V', 'W', 'AGC']:
+                    VEL[var] = VEL[var].where(VEL['bindist'] < VEL['Pressure'])
             elif metadata['trim_method'].lower() == 'water level sl':
                 print('Trimming using water level and sidelobes')
-                dist2 = np.linspace(blank + binn, (binn * (M-1)) + blank + binn, num=binc)
-            # TODO: Why does matlab incorporate cosd of the beam angle??
-
-            d2 = np.tile(dist2, (np.shape(WL)[0], 1))
-            WL2 = np.tile(WL, (np.shape(d2)[1], 1)).T
-
-            if metadata['trim_method'].lower() == 'water level':
-                bads = d2 >= WL2
-            elif metadata['trim_method'].lower() == 'water level sl':
-                bads = d2 >= WL2 * np.cos(np.deg2rad(INFO['AQDBeamAngle']))
-
-            # Experiment with masked arrays
-            for var in ['U', 'V', 'W', 'AGC']:
-                VEL[var] = np.ma.masked_array(VEL[var], bads)
-
-            # VEL['U'][bads] = np.nan
-            # VEL['V'][bads] = np.nan
-            # VEL['W'][bads] = np.nan
-            # VEL['AGC'][bads] = np.nan
+                for var in ['U', 'V', 'W', 'AGC']:
+                    VEL[var] = VEL[var].where(VEL['bindist'] < VEL['Pressure'] * np.cos(np.deg2rad(INFO['AQDBeamAngle'])))
 
             # find first bin that is all bad values
-            lastbin = np.argmin(np.all(bads, axis=0) == False)
+            # there might be a better way to do this using xarray and named dimensions, but this works for now
+            lastbin = np.argmin(np.all(np.isnan(VEL['U']), axis=0) == False)
 
-            VEL['U'] = VEL['U'][:,0:lastbin]
-            VEL['V'] = VEL['V'][:,0:lastbin]
-            VEL['W'] = VEL['W'][:,0:lastbin]
-            VEL['AGC'] = VEL['AGC'][:,0:lastbin]
-            VEL['depths'] = VEL['depths'][0:lastbin]
-            VEL['bindist'] = VEL['bindist'][0:lastbin]
+            # this trims so there are no all-nan rows in the data
+            VEL = VEL.isel(bindist=slice(0, lastbin))
 
             # TODO: need to add histcomment
 

@@ -58,11 +58,15 @@ def prf_to_cdf(basefile, metadata):
 
     print(RAW)
 
-    write_aqd_cdf_data(cdf_filename, RAW, metadata)
     print('Variables written')
 
-    qaqc.add_min_max(cdf_filename)
+    RAW = qaqc.add_min_max(RAW)
     print('Adding min/max values')
+
+    # print(RAW.attrs)
+    # need to drop datetime
+    RAW = RAW.drop('datetime')
+    RAW.to_netcdf(cdf_filename)
 
     print('Finished writing data to %s' % cdf_filename)
 
@@ -117,8 +121,6 @@ def check_metadata(metadata, instmeta, waves=False):
     if 'initial_instrument_height' not in metadata or np.isnan(metadata['initial_instrument_height']):
         metadata['initial_instrument_height'] = 0
 
-    # for k in instmeta:
-    #     print(k)
     metadata['serial_number'] = instmeta['AQDSerial_Number']
 
     # update metadata from Aquadopp header to CMG standard so that various
@@ -154,28 +156,11 @@ def check_metadata(metadata, instmeta, waves=False):
 
     return metadata
 
-def write_aqd_cdf_data(cdf_filename, RAW, metadata, waves=False):
-    """
-    Write data to NetCDF file that has already been set up using
-    define_aqd_cdf_file()
-    """
-    with Dataset(cdf_filename, 'r+') as rg:
-
-        # TODO: not too comfortable with this hack that removes TZ info...
-        timenaive = [x.replace(tzinfo=None) for x in RAW['datetime']]
-
-        rg['TransMatrix'][:] = RAW['instmeta']['AQDTransMatrix']
-
-        if 'AnaInp1' in RAW:
-            rg['AnalogInput1'][:] = RAW['AnaInp1']
-
-        if 'AnaInp2' in RAW:
-            rg['AnalogInput2'][:] = RAW['AnaInp2']
-
 def define_aqd_cdf_file(cdf_filename, RAW, metadata, waves=False):
     """Define dimensions and variables in NetCDF file"""
 
     RAW = write_metadata(RAW, metadata)
+    RAW = write_metadata(RAW, metadata['instmeta'])
 
     RAW['lat'] = xr.DataArray([metadata['latitude']], dims=('lat'), name='lat',
         attrs={'units': 'degrees_north', 'long_name': 'Latitude', 'epic_code': 500})
@@ -220,8 +205,7 @@ def define_aqd_cdf_file(cdf_filename, RAW, metadata, waves=False):
     RAW['Heading'].attrs.update({'units': 'degrees', 'long_name': 'Instrument Heading', 'datum': 'magnetic north'})
     RAW['TransMatrix'].attrs.update({'long_name': 'Transformation Matrix for this Aquadopp'})
 
-
-
+    # RAW['AnalogInput1']
 
     # with Dataset(cdf_filename, 'w', format='NETCDF4', clobber=True) as rg:
     #
@@ -279,7 +263,8 @@ def write_metadata(ds, metadata):
     #     setattr(rg, k, metadata[k])
 
     for k in metadata:
-        ds.attrs.update({k: metadata[k]})
+        if k != 'instmeta': # don't want to write out instmeta dict, call it separately
+            ds.attrs.update({k: metadata[k]})
 
     return ds
 
@@ -314,14 +299,15 @@ def load_sen(RAW, basefile, metadata):
 
     # Look for analog data TODO
 
-    SEN.rename(columns={15: 'AnaInp1'}, inplace=True)
-    SEN['AnaInp1'] = SEN['AnaInp1'] * 5 / 65535
-    SEN.rename(columns={16: 'AnaInp2'}, inplace=True)
-    SEN['AnaInp2'] = SEN['AnaInp2'] * 5 / 65535
+    SEN.rename(columns={15: 'AnalogInput1'}, inplace=True)
+    SEN['AnalogInput1'] = SEN['AnalogInput1'] * 5 / 65535
+    SEN.rename(columns={16: 'AnalogInput2'}, inplace=True)
+    SEN['AnalogInput2'] = SEN['AnalogInput2'] * 5 / 65535
 
     RAW = xr.Dataset.from_dataframe(SEN)
     RAW = RAW.rename({'index': 'time'})
     RAW['time'] = RAW['datetime']
+    RAW = RAW.expand_dims(('lat', 'lon'))
 
     return RAW
 
@@ -330,7 +316,8 @@ def load_amp_vel(RAW, basefile):
 
     for n in [1, 2, 3]:
         afile = basefile + '.a' + str(n)
-        RAW['AMP' + str(n)] = xr.DataArray(pd.read_csv(afile, header=None, delim_whitespace=True), dims=('time', 'bindist'), coords=[RAW['time'], np.arange(30)])
+        RAW['AMP' + str(n)] = xr.DataArray(pd.read_csv(afile, header=None, delim_whitespace=True),
+            dims=('time', 'bindist'), coords=[RAW['time'], np.arange(30)])
         # RAW['AMP' + str(n)] = RAW['AMP' + str(n)].rename({'dim_0': 'time'})
         vfile = basefile + '.v' + str(n)
         v = pd.read_csv(vfile, header=None, delim_whitespace=True)

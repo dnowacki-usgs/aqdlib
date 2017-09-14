@@ -7,6 +7,8 @@ import pytz
 import jdcal
 import datetime as dt
 import aqdlib
+import xarray as xr
+import pandas as pd
 
 def cdf_to_nc(cdf_filename, metadata, p_1ac=False):
 
@@ -16,147 +18,204 @@ def cdf_to_nc(cdf_filename, metadata, p_1ac=False):
 
     VEL, INFO = load_cdf_amp_vel(cdf_filename, VEL, metadata, p_1ac=p_1ac)
 
-    define_aqd_nc_file(nc_filename, VEL, metadata, INFO)
+    # define_aqd_nc_file(nc_filename, VEL, metadata, INFO)
 
-    write_aqd_nc_file(nc_filename, VEL, metadata)
+    # write_aqd_nc_file(nc_filename, VEL, metadata)
 
     # TODO: Need to add all global attributes from CDF to NC file (or similar)
-    qaqc.add_min_max(nc_filename)
+    qaqc.add_min_max(VEL)
     print('Added min/max values')
 
-    qaqc.add_final_metadata(nc_filename)
+    qaqc.add_final_metadata(VEL)
     print('Added final metadata')
 
+    # VEL = VEL.expand_dims('lat')
+    # need to associate dimensions with lat/lon
+    for var in ['U', 'V', 'W', 'AGC', 'Pressure', 'Temperature', 'Heading', 'Pitch', 'Roll']:
+        VEL[var] = reshape(VEL[var])
+
+    VEL = rename(VEL, metadata, INFO)
+
+    VEL.to_netcdf(nc_filename)
     print('Done writing NetCDF file', nc_filename)
 
     return VEL
 
+def reshape(da):
+    """
+    Add lon and lat dimensions to data and reshape to conform to our standard order
+    """
+
+    da = xr.concat([da], dim='lon')
+    da = xr.concat([da], dim='lat')
+    if len(da.shape) == 4:
+        da = da.transpose('time', 'lon', 'lat', 'bindist')
+    elif len(da.shape) == 3:
+        da = da.transpose('time', 'lon', 'lat')
+
+    return da
+
+def rename(ds, metadata, INFO):
+    """
+    Rename DataArrays, drop unused DataArrays, and add attrs
+    """
+
+    # put in attributes common to all velocity components
+    def add_vel_attributes(vel, metadata, INFO):
+        vel.attrs.update({'units': 'cm/s',
+            'data_cmnt': 'Velocity in shallowest bin is often suspect and should be used with caution'})
+
+        add_attributes(vel, metadata, INFO)
+        # TODO: why do we only do trim_method for Water Level SL?
+        if 'trim_method' in metadata and metadata['trim_method'].lower() == 'water level sl':
+            vel.attrs.update({'note': 'Velocity bins trimmed if out of water or if side lobes intersect sea surface'})
+
+    def add_attributes(var, metadata, INFO):
+        var.attrs.update({'serial_number': INFO['AQDSerial_Number'],
+            'initial_instrument_height': metadata['initial_instrument_height'],
+            'nominal_instrument_depth': metadata['nominal_instrument_depth'],
+            'height_depth_units': 'm', 'sensor_type': INFO['INST_TYPE']})
+
+    varnames = {'U': 'u_1205',
+            'V': 'v_1206',
+            'W': 'w_1204',
+            'AGC': 'AGC_1202',
+            'Pressure': 'P_1',
+            'Temperature': 'Tx_1211',
+            'Heading': 'Hdg_1215',
+            'Pitch': 'Ptch_1216',
+            'Roll': 'Roll_1217'}
+
+    ds.rename(varnames, inplace=True)
+
+    todrop = ['VEL1', 'VEL2', 'VEL3', 'AMP1', 'AMP2', 'AMP3', 'Battery', 'TransMatrix', 'AnalogInput1', 'AnalogInput2']
+    ds = ds.drop(todrop)
+
+    ds['u_1205'].attrs.update({'name': 'u', 'long_name': 'Eastward Velocity', 'generic_name': 'u', 'epic_code': 1205})
+    ds['v_1206'].attrs.update({'name': 'v', 'long_name': 'Northward Velocity', 'generic_name': 'v', 'epic_code': 1206})
+    ds['w_1204'].attrs.update({'name': 'w', 'long_name': 'Vertical Velocity', 'generic_name': 'w', 'epic_code': 1204})
+    ds['P_1'].attrs.update({'units': 'dbar', 'name': 'P', 'long_name': 'Pressure', 'generic_name': 'depth', 'epic_code': 1}) # TODO: is this generic name correct?
+    ds['Tx_1211'].attrs.update({'units': 'C', 'name': 'Tx', 'long_name': 'Instrument Transducer Temperature', 'generic_name': 'temp', 'epic_code': 1211})
+    ds['AGC_1202'].attrs.update({'units': 'counts', 'name': 'AGC', 'long_name': 'Average Echo Intensity', 'generic_name': 'AGC', 'epic_code': 1202})
+    # AGCid.sensor_type = INFO['INST_TYPE']
+
+    ds['Hdg_1215'].attrs.update({'units': 'degrees', 'name': 'Hdg', 'long_name': 'Instrument Heading', 'generic_name': 'hdg', 'epic_code': 1215})
+    if 'magnetic_variation_at_site' in metadata:
+        ds['Hdg_1215'].attrs.update({'note': 'Heading is degrees true. Converted from magnetic with magnetic variation of ' + str(metadata['magnetic_variation_at_site'])})
+    elif 'magnetic_variation' in metadata:
+        ds['Hdg_1215'].attrs.update({'note': 'Heading is degrees true. Converted from magnetic with magnetic variation of ' + str(metadata['magnetic_variation'])})
+
+    ds['Ptch_1216'].attrs.update({'units': 'degrees', 'name': 'Ptch', 'long_name': 'Instrument Pitch', 'generic_name': 'ptch', 'epic_code': 1216})
+    ds['Roll_1217'].attrs.update({'units': 'degrees', 'name': 'Roll', 'long_name': 'Instrument Roll', 'generic_name': 'roll', 'epic_code': 1217})
+
+    for v in ['P_1', 'Tx_1211', 'AGC_1202', 'Hdg_1215', 'Ptch_1216', 'Roll_1217']:
+        add_attributes(ds[v], metadata, INFO)
+
+    for v in ['u_1205', 'v_1206', 'w_1204']:
+        add_vel_attributes(ds[v], metadata, INFO)
+
+
+    return ds
+
 def load_cdf_amp_vel(cdf_filename, VEL, metadata, p_1ac=False):
-    with Dataset(cdf_filename, 'r') as rg:
 
-        # Create INFO dict with global attributes from dataset
-        INFO = {}
-        for k, v in rg.__dict__.iteritems():
-            INFO[k] = v
+    ds = xr.open_dataset(cdf_filename, autoclose=True)
 
-        # clip either by ensemble indices or by the deployment and recovery date specified in metadata
-        if 'good_ens' in metadata:
-            # we have good ensemble indices in the metadata
-            print('Using good_ens')
-            S = metadata['good_ens'][0]
-            E = metadata['good_ens'][1]
-        else:
-            # we clip by the times in/out of water as specified in the metadata
-            print('Using Deployment_date and Recovery_date')
-            time = rg['time'][:]
-            time2 = rg['time2'][:]
+    # Create INFO dict with global attributes from dataset
+    INFO = ds.attrs
 
-            times = aqdlib.time_time2_to_datetime(time, time2)
+    # clip either by ensemble indices or by the deployment and recovery date specified in metadata
+    if 'good_ens' in metadata:
+        # we have good ensemble indices in the metadata
+        print('Using good_ens')
+        S = metadata['good_ens'][0]
+        E = metadata['good_ens'][1]
 
-            print('first burst in full file:', times[0])
-            print('last burst in full file:', times[-1])
+        print('first burst in full file:', ds['time'].min().values)
+        print('last burst in full file:', ds['time'].max().values)
 
-            S = np.argwhere(times > pytz.utc.localize(dateutil.parser.parse(rg.Deployment_date)))[0].item() # .item() to avoid error when indexing
-            E = np.argwhere(times > pytz.utc.localize(dateutil.parser.parse(rg.Recovery_date)))[0].item() # do this because of the way python index ranges
+        ds = ds.isel(time=slice(S,E))
 
-            print('first burst in trimmed file:', times[S])
-            print('last burst in trimmed file:', times[E])
+        print('first burst in trimmed file:', ds['time'].min().values)
+        print('last burst in trimmed file:', ds['time'].max().values)
 
-        print('Indices of starting and ending bursts: S:', S, 'E:', E)
+    else:
+        # we clip by the times in/out of water as specified in the metadata
+        print('Using Deployment_date and Recovery_date')
+
+        print('first burst in full file:', ds['time'].min().values)
+        print('last burst in full file:', ds['time'].max().values)
+
+        ds = ds.sel(time=slice(metadata['Deployment_date'], metadata['Recovery_date']))
+
+        print('first burst in trimmed file:', ds['time'].min().values)
+        print('last burst in trimmed file:', ds['time'].max().values)
+
+    print(ds.info)
+
+    VEL, metadata = qaqc.create_water_depth(ds, metadata)
+
+    T = ds['TransMatrix'].values
+
+    VEL, T = qaqc.set_orientation(ds, T, metadata, INFO)
+
+    u, v, w = qaqc.coord_transform(VEL['VEL1'].values, VEL['VEL2'].values, VEL['VEL3'].values,
+        VEL['Heading'].values, VEL['Pitch'].values, VEL['Roll'].values, T, VEL.attrs['AQDCoordinateSystem'])
+
+    VEL['U'] = xr.DataArray(u, dims=('time', 'bindist'))
+    VEL['V'] = xr.DataArray(v, dims=('time', 'bindist'))
+    VEL['W'] = xr.DataArray(w, dims=('time', 'bindist'))
+
+    VEL = qaqc.magvar_correct(VEL, metadata)
+
+    VEL['AGC'] = (VEL['AMP1'] + VEL['AMP2'] + VEL['AMP3']) / 3
+
+    VEL = qaqc.trim_vel(VEL, metadata, INFO)
+
+    VEL = qaqc.make_bin_depth(VEL, metadata)
 
 
-        # load data from CDF file, specifying start/end bursts
-        # also transpose data so dims are TIME x DEPTH
-        vel1 = rg['VEL1'][:, S:E].T
-        vel2 = rg['VEL2'][:, S:E].T
-        vel3 = rg['VEL3'][:, S:E].T
+    return VEL, INFO
 
-        amp1 = rg['AMP1'][:, S:E].T
-        amp2 = rg['AMP2'][:, S:E].T
-        amp3 = rg['AMP3'][:, S:E].T
-
-        heading = rg['Heading'][S:E]
-        pitch = rg['Pitch'][S:E]
-        roll = rg['Roll'][S:E]
-
-        VEL['bindist'] = rg['bindist'][:]
-
-        T = rg['TransMatrix'][:]
-
-        VEL['pressure'] = rg['Pressure'][S:E]
-        VEL['temp'] = rg['Temperature'][S:E]
-        VEL['time'] = rg['time'][S:E]
-        VEL['time2'] = rg['time2'][S:E]
-
-        if p_1ac is not False:
-            VEL['press_ac'] = p_1ac[S:E]
-
-        VEL, metadata = qaqc.create_water_depth(VEL, metadata)
-
-        # initialize arrays
-        VEL['U'] = np.zeros(np.shape(vel1))
-        VEL['V'] = np.zeros(np.shape(vel2))
-        VEL['W'] = np.zeros(np.shape(vel3))
-
-        VEL, T = qaqc.set_orientation(VEL, T, metadata, INFO)
-
-        VEL['U'], VEL['V'], VEL['W'] = qaqc.coord_transform(vel1, vel2, vel3, heading, pitch, roll, T, rg.AQDCoordinateSystem)
-
-        VEL['heading'] = heading
-        VEL['pitch'] = pitch
-        VEL['roll'] = roll
-
-        VEL = qaqc.magvar_correct(VEL, metadata)
-
-        VEL['AGC'] = (amp1 + amp2 + amp3) / 3
-
-        VEL = qaqc.trim_vel(VEL, metadata, INFO)
-
-        VEL = qaqc.make_bin_depth(VEL, metadata)
-
-        return VEL, INFO
+    #     if p_1ac is not False:
+    #         VEL['press_ac'] = p_1ac[S:E]
+    #
+    return VEL, INFO
 
 def define_aqd_nc_file(nc_filename, VEL, metadata, INFO):
 
-    N, M = np.shape(VEL['U'])
-    print('N:', N, 'M:', M, 'in define_aqd_nc_file')
+    print(VEL['bindist'])
+
+    # Assign COMPOSITE global attribute (formerly assigned at end)
+    VEL.attrs.update({'COMPOSITE': 0})
+
+    # VEL['depth'].attrs.update({'epic_code': 3})
 
     with Dataset(nc_filename, 'w', format='NETCDF4', clobber=True) as rg:
 
-        # Assign COMPOSITE global attribute (formerly assigned at end)
-        rg.COMPOSITE = 0
+        # time = rg.createDimension('time', 0)
+        # depth = rg.createDimension('depth', M)
+        # lat = rg.createDimension('lat', 1)
+        # lon = rg.createDimension('lon', 1)
+        # Tmatrix = rg.createDimension('Tmatrix', 3)
+        #
+        # timeid = rg.createVariable('time', 'i', ('time',), zlib=True) # 'i' == NC_INT
+        # timeid.units = 'True Julian Day'
+        # timeid.type = 'EVEN' # TODO: this is "UNEVEN" in the CDF version
+        # timeid.epic_code = 624
+        #
+        # time2id = rg.createVariable('time2', 'i', ('time',), zlib=True) # 'i' == NC_INT
+        # time2id.units = 'msec since 0:00 GMT'
+        # time2id.type ='EVEN'
+        # time2id.epic_code = 624
 
-        time = rg.createDimension('time', 0)
-        depth = rg.createDimension('depth', M)
-        lat = rg.createDimension('lat', 1)
-        lon = rg.createDimension('lon', 1)
-        Tmatrix = rg.createDimension('Tmatrix', 3)
-
-        timeid = rg.createVariable('time', 'i', ('time',), zlib=True) # 'i' == NC_INT
-        timeid.units = 'True Julian Day'
-        timeid.type = 'EVEN' # TODO: this is "UNEVEN" in the CDF version
-        timeid.epic_code = 624
-
-        time2id = rg.createVariable('time2', 'i', ('time',), zlib=True) # 'i' == NC_INT
-        time2id.units = 'msec since 0:00 GMT'
-        time2id.type ='EVEN'
-        time2id.epic_code = 624
-
-        latid = rg.createVariable('lat', 'd', ('lat',), zlib=True)
-        latid.units = 'degree_north'
-        latid.epic_code = 500
-
-        lonid = rg.createVariable('lon', 'd', ('lon',), zlib=True)
-        lonid.units = 'degree_east'
-        lonid.epic_code = 502
-        # TODO: why is the setup of these variables different from the setup in the CDF routines?
-
-        depthid = rg.createVariable('depth', 'd', ('depth',), zlib=True)
-        depthid.units = 'm'
-        depthid.epic_code = 3
-        depthid.long_name = 'mean water depth'
-        depthid.initial_instrument_height = metadata['initial_instrument_height']
-        depthid.nominal_instrument_depth = metadata['nominal_instrument_depth']
+        # TODO: depth seems different from the cdf variable. this is a mean water depth
+        # depthid = rg.createVariable('depth', 'd', ('depth',), zlib=True)
+        # depthid.units = 'm'
+        # depthid.epic_code = 3
+        # depthid.long_name = 'mean water depth'
+        # depthid.initial_instrument_height = metadata['initial_instrument_height']
+        # depthid.nominal_instrument_depth = metadata['nominal_instrument_depth']
 
         # TODO: figure out how to cast DOUBLE_FILL to float
         # TODO: why are these created as double precision, when Ellyn says they should be singles?
@@ -166,96 +225,21 @@ def define_aqd_nc_file(nc_filename, VEL, metadata, INFO):
         bindistid.initial_instrument_height = metadata['initial_instrument_height']
         bindistid.note = 'distance is along profile from instrument head to center of bin'
 
-        def add_attributes(var, metadata, INFO):
-            var.serial_number = INFO['AQDSerial_Number']
-            var.initial_instrument_height = metadata['initial_instrument_height']
-            var.nominal_instrument_depth = metadata['nominal_instrument_depth']
-            var.height_depth_units = 'm'
-            var.sensor_type = INFO['INST_TYPE']
 
-        # put in attributes common to all velocity components
-        def add_vel_attributes(vel, metadata, INFO):
-            vel.units = 'cm/s'
-            vel.data_cmnt = 'Velocity in shallowest bin is often suspect and should be used with caution'
-            add_attributes(vel, metadata, INFO)
-            # TODO: why do we only do trim_method for Water Level SL?
-            if 'trim_method' in metadata and metadata['trim_method'].lower() == 'water level sl':
-                vel.note ='Velocity bins trimmed if out of water or if side lobes intersect sea surface'
 
-        u_1205 = rg.createVariable('u_1205', 'd', ('depth', 'lat', 'lon', 'time',), zlib=True, fill_value=aqdlib.DOUBLE_FILL)
-        u_1205.setncattr('name', 'u')
-        u_1205.long_name = 'Eastward Velocity'
-        u_1205.generic_name = 'u'
-        u_1205.epic_code = 1205
+
         add_vel_attributes(u_1205, metadata, INFO)
 
-        v_1206 = rg.createVariable('v_1206', 'd', ('depth', 'lat', 'lon', 'time',), zlib=True, fill_value=aqdlib.DOUBLE_FILL)
-        v_1206.setncattr('name', 'v')
-        v_1206.long_name = 'Northward Velocity'
-        v_1206.generic_name = 'v'
-        v_1206.epic_code = 1206
         add_vel_attributes(v_1206, metadata, INFO)
 
-        w_1204 = rg.createVariable('w_1204', 'd', ('depth', 'lat', 'lon', 'time',), zlib=True, fill_value=aqdlib.DOUBLE_FILL)
-        w_1204.setncattr('name', 'w')
-        w_1204.long_name = 'Vertical Velocity'
-        w_1204.generic_name = 'w'
-        w_1204.epic_code = 1204
+
         add_vel_attributes(w_1204, metadata, INFO)
 
-        Pressid = rg.createVariable('P_1', 'd', ('lat', 'lon', 'time',), zlib=True, fill_value=aqdlib.DOUBLE_FILL)
-        Pressid.units = 'dbar'
-        Pressid.epic_code = 1
-        Pressid.setncattr('name', 'P')
-        Pressid.long_name = 'PRESSURE (DB)'
-        Pressid.generic_name = 'depth'
+
         add_attributes(Pressid, metadata, INFO)
         # TODO: why no sensor_type in these vars?
 
-        Tempid = rg.createVariable('Tx_1211', 'd', ('lat', 'lon', 'time',), zlib=True, fill_value=aqdlib.DOUBLE_FILL)
-        Tempid.units = 'C'
-        Tempid.epic_code = 1211
-        Tempid.setncattr('name', 'Tx')
-        Tempid.long_name = 'Instrument Transducer Temperature'
-        Tempid.generic_name = 'temp'
-        add_attributes(Tempid, metadata, INFO)
 
-        AGCid = rg.createVariable('AGC_1202', 'd', ('depth', 'lat', 'lon', 'time',), zlib=True, fill_value=aqdlib.DOUBLE_FILL)
-        AGCid.units = 'counts'
-        AGCid.epic_code = 1202
-        AGCid.setncattr('name', 'AGC')
-        AGCid.long_name = 'Average Echo Intensity (AGC)'
-        AGCid.generic_name = 'AGC'
-        AGCid.sensor_type = INFO['INST_TYPE']
-        add_attributes(AGCid, metadata, INFO)
-
-        headid = rg.createVariable('Hdg_1215', 'd', ('lat', 'lon', 'time',), zlib=True, fill_value=aqdlib.DOUBLE_FILL)
-        headid.units = 'degrees'
-        headid.epic_code = 1215
-        headid.setncattr('name', 'Hdg')
-        headid.long_name = 'INST Heading'
-        headid.generic_name = 'hdg'
-        add_attributes(headid, metadata, INFO)
-        if 'magnetic_variation_at_site' in metadata:
-            headid.note = 'Heading is degrees true. Converted from magnetic with magnetic variation of ' + str(metadata['magnetic_variation_at_site'])
-        elif 'magnetic_variation' in metadata:
-            headid.note = 'Heading is degrees true. Converted from magnetic with magnetic variation of ' + str(metadata['magnetic_variation'])
-
-        ptchid = rg.createVariable('Ptch_1216', 'd', ('lat', 'lon', 'time',), zlib=True, fill_value=aqdlib.DOUBLE_FILL)
-        ptchid.units = 'degrees'
-        ptchid.epic_code = 1216
-        ptchid.setncattr('name', 'Ptch')
-        ptchid.long_name = 'INST Pitch'
-        ptchid.generic_name = 'ptch'
-        add_attributes(ptchid, metadata, INFO)
-
-        rollid = rg.createVariable('Roll_1217', 'd', ('lat', 'lon', 'time',), zlib=True, fill_value=aqdlib.DOUBLE_FILL)
-        rollid.units = 'degrees'
-        rollid.epic_code = 1217
-        rollid.setncattr('name', 'Roll')
-        rollid.long_name = 'INST Roll'
-        rollid.generic_name = 'roll'
-        add_attributes(rollid, metadata, INFO)
 
         # TODO: add analog input variables (OBS, NTU, etc)
 
