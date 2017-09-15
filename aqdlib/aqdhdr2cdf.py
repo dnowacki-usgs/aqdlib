@@ -11,64 +11,97 @@ import qaqc
 import pandas as pd
 import xarray as xr
 
-def prf_to_cdf(basefile, metadata):
+def prf_to_cdf(metadata):
     """Main load file"""
+
+    basefile = metadata['basefile']
 
     # get instrument metadata from the HDR file
     instmeta = read_aqd_hdr(basefile)
 
+    metadata['instmeta'] = instmeta
+
     print("Loading ASCII files")
 
-    # basePath = os.path.dirname(basefile)
-    # baseName = os.path.basename(basefile)
-    RAW = {}
-
     # Load sensor data
-    RAW = load_sen(RAW, basefile, metadata)
+    RAW = load_sen(metadata)
+
+    # Deal with metadata peculiarities
+    metadata = check_metadata(metadata)
+
+    RAW = check_orientation(RAW, metadata)
 
     # Load amplitude and velocity data
     RAW = load_amp_vel(RAW, basefile)
 
     # Compute time stamps
-    RAW = compute_time(RAW, instmeta)
-
-    # Deal with metadata peculiarities
-    metadata = check_metadata(metadata, instmeta)
-
-    RAW = check_orientation(RAW, metadata)
+    RAW = compute_time(RAW, metadata)
 
     # TODO: clock drift code
     # TODO: Move time to center of ensemble??
     # TODO: logmeta code
 
     # FIXME
-    metadata['instmeta'] = instmeta
+
 
     # Put in fill values
-    print("about to insert fill values")
+    # print("about to insert fill values")
     # FIXME
     # RAW = insert_fill_values(RAW)
 
     # configure file
-    cdf_filename = metadata['filename'] + '-raw.cdf' # TODO: fix the path
-    print('Opening %s' % cdf_filename)
+    cdf_filename = metadata['filename'] + '-raw.cdf'
 
-    define_aqd_cdf_file(cdf_filename, RAW, metadata)
-    print('Variables created')
+    # write out metadata
+    RAW = write_metadata(RAW, metadata)
+    RAW = write_metadata(RAW, metadata['instmeta'])
 
-    print(RAW)
-
-    print('Variables written')
+    update_attrs(cdf_filename, RAW, metadata)
 
     RAW = qaqc.add_min_max(RAW)
-    print('Adding min/max values')
 
-    # print(RAW.attrs)
-    # need to drop datetime
+    # need tp drop datetime
     RAW = RAW.drop('datetime')
     RAW.to_netcdf(cdf_filename)
 
     print('Finished writing data to %s' % cdf_filename)
+
+    print(RAW)
+
+    return RAW
+
+def load_sen(metadata):
+    """Load data from .sen file"""
+
+    senfile = metadata['basefile'] + '.sen'
+
+    # read csv and parse dates
+    # https://stackoverflow.com/questions/27112591/parsing-year-month-day-hour-minute-second-in-python
+    def parse(year, month, day, hour, minute, second):
+        return year + '-' + month + '-' + day + ' ' + hour + ':' + minute + ':' + second
+
+    SEN = pd.read_csv(senfile, header=None, delim_whitespace=True,
+        parse_dates={'datetime': [2, 0, 1, 3, 4, 5]}, date_parser=parse, usecols=[0, 1, 2, 3, 4, 5, 8, 10, 11, 12, 13, 14, 15, 16])
+
+    # rename columns from numeric to human-readable
+    SEN.rename(columns={10: 'Heading', 11: 'Pitch', 12: 'Roll', 13:'Pressure', 14:'Temperature', 8: 'Battery'}, inplace=True)
+
+    # Look for analog data TODO
+    SEN.rename(columns={15: 'AnalogInput1'}, inplace=True)
+    SEN['AnalogInput1'] = SEN['AnalogInput1'] * 5 / 65535
+    SEN.rename(columns={16: 'AnalogInput2'}, inplace=True)
+    SEN['AnalogInput2'] = SEN['AnalogInput2'] * 5 / 65535
+
+    # create xarray Dataset
+    RAW = xr.Dataset.from_dataframe(SEN)
+    RAW = RAW.rename({'index': 'time'})
+    RAW['time'] = RAW['datetime']
+
+    # add 1d lon and lat dims
+    # RAW = RAW.expand_dims(('lon', 'lat'))
+
+    # put dimensions in correct order
+    # RAW = RAW.transpose('time', 'lon', 'lat')
 
     return RAW
 
@@ -101,14 +134,11 @@ def check_orientation(RAW, metadata, waves=False):
 
     RAW['bindist'] = xr.DataArray(bindist, dims=('bindist'), name='bindist')
 
-    RAW['depth'] = xr.DataArray(depth, dims=('depth'), name='depth',
-        attrs={'units': 'm', 'long_name': 'mean water depth',
-        'bin_size': metadata['bin_size'], 'center_first_bin': metadata['center_first_bin'],
-        'bin_count': metadata['bin_count'], 'transducer_offset_from_bottom': metadata['transducer_offset_from_bottom']})
+    RAW['depth'] = xr.DataArray(depth, dims=('bindist'), name='depth')
 
     return RAW
 
-def check_metadata(metadata, instmeta, waves=False):
+def check_metadata(metadata, waves=False):
 
     # Add some metadata originally in the run scripts
     metadata['nominal_sensor_depth_note'] = 'WATER_DEPTH - initial_instrument_height'
@@ -121,30 +151,30 @@ def check_metadata(metadata, instmeta, waves=False):
     if 'initial_instrument_height' not in metadata or np.isnan(metadata['initial_instrument_height']):
         metadata['initial_instrument_height'] = 0
 
-    metadata['serial_number'] = instmeta['AQDSerial_Number']
+    metadata['serial_number'] = metadata['instmeta']['AQDSerial_Number']
 
     # update metadata from Aquadopp header to CMG standard so that various
     # profilers have the same attribute wording.  Redundant, but necessary
     if not waves:
-        metadata['bin_count'] = instmeta['AQDNumberOfCells']
-        metadata['bin_size'] = instmeta['AQDCellSize'] / 100 # from cm to m
-        metadata['blanking_distance'] = instmeta['AQDBlankingDistance'] # already in m
+        metadata['bin_count'] = metadata['instmeta']['AQDNumberOfCells']
+        metadata['bin_size'] = metadata['instmeta']['AQDCellSize'] / 100 # from cm to m
+        metadata['blanking_distance'] = metadata['instmeta']['AQDBlankingDistance'] # already in m
         # Nortek lists the distance to the center of the first bin as the blanking
         # distance plus one cell size
         metadata['center_first_bin'] = metadata['blanking_distance'] + metadata['bin_size'] # in m
     else:
         metadata['bin_count'] = 1 # only 1 wave bin
-        metadata['bin_size'] = instmeta['WaveCellSize'] # already in m
-        metadata['blanking_distance'] = instmeta['AQDBlankingDistance'] # already in m
+        metadata['bin_size'] = metadata['instmeta']['WaveCellSize'] # already in m
+        metadata['blanking_distance'] = metadata['instmeta']['AQDBlankingDistance'] # already in m
         # need to set center_first_bin after return in main calling function
 
-    metadata['salinity_set_by_user'] = instmeta['AQDSalinity']
+    metadata['salinity_set_by_user'] = metadata['instmeta']['AQDSalinity']
     metadata['salinity_set_by_user_units'] = 'ppt'
 
-    metadata['frequency'] = instmeta['AQDFrequency']
-    metadata['beam_width'] = instmeta['AQDBeamWidth']
-    metadata['beam_pattern'] = instmeta['AQDBeamPattern']
-    metadata['beam_angle'] = instmeta['AQDBeamAngle']
+    metadata['frequency'] = metadata['instmeta']['AQDFrequency']
+    metadata['beam_width'] = metadata['instmeta']['AQDBeamWidth']
+    metadata['beam_pattern'] = metadata['instmeta']['AQDBeamPattern']
+    metadata['beam_angle'] = metadata['instmeta']['AQDBeamAngle']
     # instmeta['AQDHeadRotation'] = metadata.pop('head_rotation') # also deletes this key. Not sure why the Matlab file does this, maybe need TODO look into this
 
     # TODO: figure these out
@@ -156,35 +186,49 @@ def check_metadata(metadata, instmeta, waves=False):
 
     return metadata
 
-def define_aqd_cdf_file(cdf_filename, RAW, metadata, waves=False):
+def update_attrs(cdf_filename, RAW, metadata, waves=False):
     """Define dimensions and variables in NetCDF file"""
 
-    RAW = write_metadata(RAW, metadata)
-    RAW = write_metadata(RAW, metadata['instmeta'])
+    RAW['lat'] = xr.DataArray([metadata['latitude']], dims=('lat'), name='lat')
+    RAW['lon'] = xr.DataArray([metadata['longitude']], dims=('lon'), name='lon')
 
-    RAW['lat'] = xr.DataArray([metadata['latitude']], dims=('lat'), name='lat',
-        attrs={'units': 'degrees_north', 'long_name': 'Latitude', 'epic_code': 500})
-    RAW['lon'] = xr.DataArray([metadata['longitude']], dims=('lon'), name='lon',
-        attrs={'units': 'degrees_east', 'long_name': 'Longitude', 'epic_code': 502})
-
-    # FIXME: make a proper transformation matrix
     RAW['TransMatrix'] = xr.DataArray(metadata['instmeta']['AQDTransMatrix'], dims=('Tmatrix', 'Tmatrix'), name='TransMatrix')
-    RAW['time'].attrs.update({'standard_name': 'time', 'axis': 'T'})
 
-    RAW['bindist'].attrs.update({'units': 'm', 'long_name': 'distance from transducer head',
-        'bin_size': metadata['bin_size'], 'center_first_bin': metadata['center_first_bin'],
-        'bin_count': metadata['bin_count'], 'transducer_offset_from_bottom': metadata['transducer_offset_from_bottom']})
+    RAW['time'].attrs.update({'standard_name': 'time',
+        'axis': 'T'})
 
-    RAW['Temperature'].attrs.update({'units': 'C', 'long_name': 'Temperature', 'generic_name': 'temp'})
+    RAW['lat'].attrs.update({'units': 'degrees_north',
+        'long_name': 'Latitude',
+        'epic_code': 500})
 
-    RAW['Pressure'].attrs.update({'units': 'dbar', 'long_name': 'Pressure', 'generic_name': 'press',
+    RAW['lon'].attrs.update({'units': 'degrees_east',
+        'long_name': 'Longitude',
+        'epic_code': 502})
+
+    RAW['bindist'].attrs.update({'units': 'm',
+        'long_name': 'distance from transducer head',
+        'bin_size': metadata['bin_size'],
+        'center_first_bin': metadata['center_first_bin'],
+        'bin_count': metadata['bin_count'],
+        'transducer_offset_from_bottom': metadata['transducer_offset_from_bottom']})
+
+    RAW['Temperature'].attrs.update({'units': 'C',
+        'long_name': 'Temperature',
+        'generic_name': 'temp'})
+
+    RAW['Pressure'].attrs.update({'units': 'dbar',
+        'long_name': 'Pressure',
+        'generic_name': 'press',
         'note': 'raw pressure from instrument, not corrected for changes in atmospheric pressure'})
 
     for n in [1, 2, 3]:
-        RAW['VEL' + str(n)].attrs.update({'units': 'cm/s', 'Type': 'scalar',
+        RAW['VEL' + str(n)].attrs.update({'units': 'cm/s',
+            'Type': 'scalar',
             'transducer_offset_from_bottom': metadata['transducer_offset_from_bottom']})
         RAW['AMP' + str(n)].attrs.update({'long_name': 'Beam ' + str(n) + ' Echo Amplitude',
-            'units': 'counts', 'Type': 'scalar', 'transducer_offset_from_bottom': metadata['transducer_offset_from_bottom'] })
+            'units': 'counts',
+            'Type': 'scalar',
+            'transducer_offset_from_bottom': metadata['transducer_offset_from_bottom'] })
 
     if metadata['instmeta']['AQDCoordinateSystem'] == 'ENU':
         RAW['VEL1'].attrs.update({'long_name': 'Eastward current velocity'})
@@ -199,10 +243,26 @@ def define_aqd_cdf_file(cdf_filename, RAW, metadata, waves=False):
         RAW['VEL2'].attrs.update({'long_name': 'Beam 2 current velocity'})
         RAW['VEL3'].attrs.update({'long_name': 'Beam 3 current velocity'})
 
-    RAW['Battery'].attrs.update({'units': 'Volts', 'long_name': 'Battery Voltage'})
-    RAW['Pitch'].attrs.update({'units': 'degrees', 'long_name': 'Instrument Pitch'})
-    RAW['Roll'].attrs.update({'units': 'degrees', 'long_name': 'Instrument Roll'})
-    RAW['Heading'].attrs.update({'units': 'degrees', 'long_name': 'Instrument Heading', 'datum': 'magnetic north'})
+    RAW['Battery'].attrs.update({'units': 'Volts',
+        'long_name': 'Battery Voltage'})
+
+    RAW['Pitch'].attrs.update({'units': 'degrees',
+        'long_name': 'Instrument Pitch'})
+
+    RAW['Roll'].attrs.update({'units': 'degrees',
+        'long_name': 'Instrument Roll'})
+
+    RAW['Heading'].attrs.update({'units': 'degrees',
+        'long_name': 'Instrument Heading',
+        'datum': 'magnetic north'})
+
+    RAW['depth'].attrs.update({'units': 'm',
+        'long_name': 'mean water depth',
+        'bin_size': metadata['bin_size'],
+        'center_first_bin': metadata['center_first_bin'],
+        'bin_count': metadata['bin_count'],
+        'transducer_offset_from_bottom': metadata['transducer_offset_from_bottom']})
+
     RAW['TransMatrix'].attrs.update({'long_name': 'Transformation Matrix for this Aquadopp'})
 
     # RAW['AnalogInput1']
@@ -268,46 +328,22 @@ def write_metadata(ds, metadata):
 
     return ds
 
-def compute_time(RAW, instmeta):
+def compute_time(RAW, metadata):
     """Compute Julian date and then time and time2 for use in NetCDF file"""
 
-    # FIXME: need to shift
     # shift times to center of ensemble
-    # RAW['time'] = RAW['time'] + dt.timedelta(seconds=instmeta['AQDAverageInterval']/2)
+    # FIXME: this forces to int and does not check to see if there is a remainder
+    RAW['time'] = RAW['time'] + np.timedelta64(int(metadata['instmeta']['AQDAverageInterval']/2), 's')
 
-    # RAW['jd'] = np.array([qaqc.julian(t) for t in RAW['datetime']])
-    #
-    # RAW['time'] = np.floor(RAW['jd'])
-    # # TODO: Hopefully this is correct... roundoff errors on big numbers...
-    # RAW['time2'] = (RAW['jd'] - np.floor(RAW['jd']))*86400000
+    # create Julian date
+    RAW['jd'] = RAW['time'].to_dataframe().index.to_julian_date() + 0.5
 
-    return RAW
+    RAW['epic_time'] = np.floor(RAW['jd'])
+    if np.all(np.mod(RAW['epic_time'], 1) == 0): # make sure they are all integers, and then cast as such
+        RAW['epic_time'] = RAW['epic_time'].astype(int)
 
-def load_sen(RAW, basefile, metadata):
-    """Load data from .sen file"""
-
-    senfile = basefile + '.sen'
-
-    # https://stackoverflow.com/questions/27112591/parsing-year-month-day-hour-minute-second-in-python
-    def parse(year, month, day, hour, minute, second):
-        return year + '-' + month + '-' + day + ' ' + hour + ':' + minute + ':' + second
-
-    SEN = pd.read_csv(senfile, header=None, delim_whitespace=True,
-        parse_dates={'datetime': [2, 0, 1, 3, 4, 5]}, date_parser=parse, usecols=[0, 1, 2, 3, 4, 5, 8, 10, 11, 12, 13, 14, 15, 16])
-
-    SEN.rename(columns={10: 'Heading', 11: 'Pitch', 12: 'Roll', 13:'Pressure', 14:'Temperature', 8: 'Battery'}, inplace=True)
-
-    # Look for analog data TODO
-
-    SEN.rename(columns={15: 'AnalogInput1'}, inplace=True)
-    SEN['AnalogInput1'] = SEN['AnalogInput1'] * 5 / 65535
-    SEN.rename(columns={16: 'AnalogInput2'}, inplace=True)
-    SEN['AnalogInput2'] = SEN['AnalogInput2'] * 5 / 65535
-
-    RAW = xr.Dataset.from_dataframe(SEN)
-    RAW = RAW.rename({'index': 'time'})
-    RAW['time'] = RAW['datetime']
-    RAW = RAW.expand_dims(('lat', 'lon'))
+    # TODO: Hopefully this is correct... roundoff errors on big numbers...
+    RAW['epic_time2'] = (RAW['jd'] - np.floor(RAW['jd']))*86400000
 
     return RAW
 
@@ -317,12 +353,12 @@ def load_amp_vel(RAW, basefile):
     for n in [1, 2, 3]:
         afile = basefile + '.a' + str(n)
         RAW['AMP' + str(n)] = xr.DataArray(pd.read_csv(afile, header=None, delim_whitespace=True),
-            dims=('time', 'bindist'), coords=[RAW['time'], np.arange(30)])
+            dims=('time', 'bindist'), coords=[RAW['time'], RAW['bindist']])
         # RAW['AMP' + str(n)] = RAW['AMP' + str(n)].rename({'dim_0': 'time'})
         vfile = basefile + '.v' + str(n)
         v = pd.read_csv(vfile, header=None, delim_whitespace=True)
         # convert to cm/s
-        RAW['VEL' + str(n)] = xr.DataArray(v * 100, dims=('time', 'bindist'), coords=[RAW['time'], np.arange(30)])
+        RAW['VEL' + str(n)] = xr.DataArray(v * 100, dims=('time', 'bindist'), coords=[RAW['time'], RAW['bindist']])
 
     return RAW
 

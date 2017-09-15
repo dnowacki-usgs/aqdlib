@@ -154,19 +154,17 @@ def set_orientation(VEL, T, metadata, INFO):
 
     if INFO['orientation'] == 'UP':
         print('User instructed that instrument was pointing UP')
-        VEL['depths'] = np.flipud(np.linspace(Wdepth - (binn * (M - 1) + blank2 + binn), Wdepth - (blank2 + binn), num=binc)) # need to use flipud because 1d array
+        VEL['depth'] = xr.DataArray(np.flipud(np.linspace(Wdepth - (binn * (M - 1) + blank2 + binn), Wdepth - (blank2 + binn), num=binc)), dims=('bindist')) # need to use flipud because 1d array
     elif INFO['orientation'] == 'DOWN':
         print('User instructed that instrument was pointing DOWN')
         T[1,:] = -T[1,:]
         T[2,:] = -T[2,:]
-        VEL['depths'] = np.linspace(Wdepth - blank3 + binn, Wdepth - blank3 + binn * M, num=binc)
+        VEL['depth'] = xr.DataArray(np.linspace(Wdepth - blank3 + binn, Wdepth - blank3 + binn * M, num=binc),  dims=('bindist'))
 
     return VEL, T
 
 def make_bin_depth(VEL, metadata):
     """Create bin_depth variable"""
-
-    N, M = np.shape(VEL['U'])
 
     if 'press_ac' in VEL:
         # VEL['bin_depth'] = np.tile(VEL['press_ac'], (M, 1)) - np.tile(VEL['bindist'], (N, 1)).T;
@@ -241,9 +239,9 @@ def trim_vel(VEL, metadata, INFO, waves=False):
 
     N, M = np.shape(VEL['U'])
 
-    if 'press_ac' in VEL:
+    if 'Pressure_ac' in VEL:
         print('Using atmospherically corrected pressure to trim')
-        WL = VEL['press_ac'] + INFO['transducer_offset_from_bottom']
+        WL = VEL['Pressure_ac'] + INFO['transducer_offset_from_bottom']
     else:
         # FIXME incorporate press_ ac below
         print('Using NON-atmospherically corrected pressure to trim')

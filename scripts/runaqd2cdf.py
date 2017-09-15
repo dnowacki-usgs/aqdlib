@@ -25,4 +25,4 @@ config = yaml.safe_load(open(args.config))
 for k in config:
     metadata[k] = config[k]
 
-RAW = aqdlib.prf_to_cdf(metadata['basefile'], metadata)
+RAW = aqdlib.prf_to_cdf(metadata)

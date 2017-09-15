@@ -45,7 +45,10 @@ def cdf_to_nc(cdf_filename, metadata, atmpres=False):
 
     # Reshape and associate dimensions with lat/lon
     for var in ['U', 'V', 'W', 'AGC', 'Pressure', 'Temperature', 'Heading', 'Pitch', 'Roll']:
-        VEL[var] = ds_reshape(VEL[var])
+        VEL = da_reshape(VEL, var)
+
+    # swap_dims from bindist to depth
+    VEL = ds_swap_dims(VEL)
 
     VEL = ds_rename(VEL, metadata, INFO)
 
@@ -58,6 +61,8 @@ def cdf_to_nc(cdf_filename, metadata, atmpres=False):
     VEL.to_netcdf(nc_filename)
     print('Done writing NetCDF file', nc_filename)
 
+    print(VEL['u_1205'].attrs)
+
     return VEL
 
 def load_cdf(cdf_filename, metadata, atmpres=False):
@@ -65,10 +70,9 @@ def load_cdf(cdf_filename, metadata, atmpres=False):
     ds = xr.open_dataset(cdf_filename, autoclose=True)
 
     if atmpres is not False:
-        print(atmpres)
         p = xr.open_dataset(atmpres)
-        print(p)
-        # ds['P_1ac'] = xr.DataArray()
+        # TODO: check to make sure this data looks OK
+        ds['Pressure_ac'] = xr.DataArray(ds['Pressure'] - (p['atmpres'] - p['atmpres'].offset))
 
     return ds
 
@@ -105,8 +109,6 @@ def clip_ds(ds, metadata):
 
 def define_aqd_nc_file(nc_filename, VEL, metadata, INFO):
 
-    print(VEL['bindist'])
-
     # Assign COMPOSITE global attribute (formerly assigned at end)
     VEL.attrs.update({'COMPOSITE': 0})
 
@@ -114,29 +116,9 @@ def define_aqd_nc_file(nc_filename, VEL, metadata, INFO):
 
     with Dataset(nc_filename, 'w', format='NETCDF4', clobber=True) as rg:
 
-        # time = rg.createDimension('time', 0)
-        # depth = rg.createDimension('depth', M)
-        # lat = rg.createDimension('lat', 1)
-        # lon = rg.createDimension('lon', 1)
-        # Tmatrix = rg.createDimension('Tmatrix', 3)
-        #
-        # timeid = rg.createVariable('time', 'i', ('time',), zlib=True) # 'i' == NC_INT
-        # timeid.units = 'True Julian Day'
-        # timeid.type = 'EVEN' # TODO: this is "UNEVEN" in the CDF version
-        # timeid.epic_code = 624
-        #
-        # time2id = rg.createVariable('time2', 'i', ('time',), zlib=True) # 'i' == NC_INT
-        # time2id.units = 'msec since 0:00 GMT'
-        # time2id.type ='EVEN'
-        # time2id.epic_code = 624
-
         # TODO: depth seems different from the cdf variable. this is a mean water depth
         # depthid = rg.createVariable('depth', 'd', ('depth',), zlib=True)
-        # depthid.units = 'm'
-        # depthid.epic_code = 3
-        # depthid.long_name = 'mean water depth'
-        # depthid.initial_instrument_height = metadata['initial_instrument_height']
-        # depthid.nominal_instrument_depth = metadata['nominal_instrument_depth']
+
 
         # TODO: figure out how to cast DOUBLE_FILL to float
         # TODO: why are these created as double precision, when Ellyn says they should be singles?
@@ -148,41 +130,31 @@ def define_aqd_nc_file(nc_filename, VEL, metadata, INFO):
 
         # TODO: add analog input variables (OBS, NTU, etc)
 
-        bdepid = rg.createVariable('bin_depth', 'd', ('depth', 'lat', 'lon', 'time',), zlib=True, fill_value=aqdlib.DOUBLE_FILL)
-        bdepid.setncattr('name', 'bin depth')
-        bdepid.units = 'm'
-        bdepid.initial_instrument_height = metadata['initial_instrument_height']
-        add_attributes(bdepid, metadata, INFO)
-        if 'press_ac' in VEL:
-            bdepid.note = 'Actual depth time series of velocity bins. Calculated as corrected pressure(P_1ac) - bindist.'
-        else:
-            bdepid.note = 'Actual depth time series of velocity bins. Calculated as pressure(P_1) - bindist.'
+def ds_swap_dims(ds):
 
-        if 'press_ac' in VEL:
-            ACPressid = rg.createVariable('P_1ac', 'd', ('lat', 'lon', 'time',), zlib=True, fill_value=aqdlib.DOUBLE_FILL)
-            ACPressid.units = 'dbar'
-            ACPressid.setncattr('name', 'Pac') # TODO: is Pac correct?
-            ACPressid.long_name = 'CORRECTED PRESSURE (DB)'
-            add_attributes(ACPressid, metadata, INFO)
-            ACPressid.note = 'Corrected for variations in atmospheric pressure using nearby MET station'
+    # ds['depth'] = xr.DataArray(ds['depth'].values, dims=('bindist'))
+    ds = ds.swap_dims({'bindist': 'depth'})
+    # ds['bindist'] = ds['bindist'].swap_dims({'bindist': 'depth'})
 
-def ds_reshape(da):
+    return ds
+
+def da_reshape(ds, var):
     """
     Add lon and lat dimensions to DataArrays and reshape to conform to our
     standard order
     """
 
     # Add the dimensions using concat
-    da = xr.concat([da], dim='lon')
-    da = xr.concat([da], dim='lat')
+    ds[var] = xr.concat([ds[var]], dim=ds['lon'])
+    ds[var] = xr.concat([ds[var]], dim=ds['lat'])
 
     # Reshape using transpose depending on shape
-    if len(da.shape) == 4:
-        da = da.transpose('time', 'lon', 'lat', 'bindist')
-    elif len(da.shape) == 3:
-        da = da.transpose('time', 'lon', 'lat')
+    if len(ds[var].shape) == 4:
+        ds[var] = ds[var].transpose('time', 'lon', 'lat', 'bindist')
+    elif len(ds[var].shape) == 3:
+        ds[var] = ds[var].transpose('time', 'lon', 'lat')
 
-    return da
+    return ds
 
 def ds_rename(ds, metadata, INFO):
     """
@@ -190,14 +162,17 @@ def ds_rename(ds, metadata, INFO):
     """
 
     varnames = {'U': 'u_1205',
-            'V': 'v_1206',
-            'W': 'w_1204',
-            'AGC': 'AGC_1202',
-            'Pressure': 'P_1',
-            'Temperature': 'Tx_1211',
-            'Heading': 'Hdg_1215',
-            'Pitch': 'Ptch_1216',
-            'Roll': 'Roll_1217'}
+        'V': 'v_1206',
+        'W': 'w_1204',
+        'AGC': 'AGC_1202',
+        'Pressure': 'P_1',
+        'Temperature': 'Tx_1211',
+        'Heading': 'Hdg_1215',
+        'Pitch': 'Ptch_1216',
+        'Roll': 'Roll_1217'}
+
+    if 'Pressure_ac' in ds:
+        varnames['Pressure_ac'] = 'P_1ac'
 
     ds.rename(varnames, inplace=True)
 
@@ -208,9 +183,16 @@ def ds_drop(ds, metadata, INFO):
     Drop old DataArrays from Dataset that won't make it into the final .nc file
     """
 
-    todrop = ['VEL1', 'VEL2', 'VEL3',
-              'AMP1', 'AMP2', 'AMP3',
-              'Battery', 'TransMatrix', 'AnalogInput1', 'AnalogInput2']
+    todrop = ['VEL1',
+        'VEL2',
+        'VEL3',
+        'AMP1',
+        'AMP2',
+        'AMP3',
+        'Battery',
+        'TransMatrix',
+        'AnalogInput1',
+        'AnalogInput2']
 
     ds = ds.drop(todrop)
 
@@ -237,6 +219,18 @@ def ds_add_attrs(ds, metadata, INFO):
             '_FillValue': 1e35})
 
     # Update attributes for EPIC and STG compliance
+    ds.lat.encoding['_FillValue'] = 1e35
+
+    ds.lon.encoding['_FillValue'] = 1e35
+
+    ds['epic_time'].attrs.update({'units': 'True Julian Day',
+        'type': 'EVEN',
+        'epic_code': 624})
+
+    ds['epic_time2'].attrs.update({'units': 'msec since 0:00 GMT',
+        'type': 'EVEN',
+        'epic_code': 624})
+
     ds['u_1205'].attrs.update({'name': 'u',
         'long_name': 'Eastward Velocity',
         'generic_name': 'u',
@@ -257,6 +251,29 @@ def ds_add_attrs(ds, metadata, INFO):
         'long_name': 'Pressure',
         'generic_name': 'depth',
         'epic_code': 1}) # TODO: is this generic name correct?
+
+    if 'P_1ac' in ds:
+        ds['P_1ac'].attrs.update({'units': 'dbar',
+            'name': 'Pac',
+            'long_name': 'Corrected pressure',
+            'note': 'Corrected for variations in atmospheric pressure using nearby met station'})
+        add_attributes(ds['P_1ac'], metadata, INFO)
+
+    ds['depth'].attrs.update({'units': 'm',
+        'long_name': 'mean water depth',
+        'initial_instrument_height': metadata['initial_instrument_height'],
+        'nominal_instrument_depth': metadata['nominal_instrument_depth'],
+        '_FillValue': 1e35,
+        'epic_code': 3})
+
+
+    ds['bin_depth'].attrs.update({'units': 'm',
+        'name': 'bin depth'})
+
+    if 'P_1ac' in ds:
+        ds['bin_depth'].attrs.update({'note': 'Actual depth time series of velocity bins. Calculated as corrected pressure(P_1ac) - bindist.'})
+    else:
+        ds['bin_depth'].attrs.update({'note': 'Actual depth time series of velocity bins. Calculated as pressure(P_1) - bindist.'})
 
     ds['Tx_1211'].attrs.update({'units': 'C',
         'name': 'Tx',
@@ -292,7 +309,7 @@ def ds_add_attrs(ds, metadata, INFO):
         'generic_name': 'roll',
         'epic_code': 1217})
 
-    for v in ['P_1', 'Tx_1211', 'AGC_1202', 'Hdg_1215', 'Ptch_1216', 'Roll_1217', 'u_1205', 'v_1206', 'w_1204']:
+    for v in ['P_1', 'Tx_1211', 'AGC_1202', 'Hdg_1215', 'Ptch_1216', 'Roll_1217', 'u_1205', 'v_1206', 'w_1204', 'bin_depth']:
         add_attributes(ds[v], metadata, INFO)
 
     for v in ['u_1205', 'v_1206', 'w_1204']:
