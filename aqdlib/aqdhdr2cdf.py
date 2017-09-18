@@ -1,10 +1,5 @@
 from __future__ import division, print_function
-import os
 import numpy as np
-import datetime as dt
-import pytz
-from netCDF4 import Dataset
-import netCDF4
 # from aqdlib import aqdlib.DOUBLE_FILL
 import aqdlib
 import qaqc

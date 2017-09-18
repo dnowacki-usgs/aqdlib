@@ -1,9 +1,6 @@
 from __future__ import division, print_function
 import xarray as xr
-import pandas as pd
-import numpy as np
 import qaqc
-import aqdlib
 
 def cdf_to_nc(cdf_filename, metadata, atmpres=False):
     """
