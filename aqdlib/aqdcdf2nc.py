@@ -187,6 +187,8 @@ def ds_add_attrs(ds, metadata, INFO):
             'height_depth_units': 'm', 'sensor_type': INFO['INST_TYPE'],
             '_FillValue': 1e35})
 
+    ds.attrs.update({'COMPOSITE': 0})
+
     # Update attributes for EPIC and STG compliance
     ds.lat.encoding['_FillValue'] = 1e35
 
