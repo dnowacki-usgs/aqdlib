@@ -51,7 +51,7 @@ def cdf_to_nc(cdf_filename, metadata, atmpres=False):
 
     VEL = ds_drop(VEL)
 
-    VEL = ds_add_attrs(VEL, metadata, INFO)
+    VEL = ds_add_attrs(VEL, metadata)
 
     # TODO: Need to add all global attributes from CDF to NC file (or similar)
     VEL = qaqc.add_min_max(VEL)
@@ -167,7 +167,7 @@ def ds_drop(ds):
 
     return ds
 
-def ds_add_attrs(ds, metadata, INFO):
+def ds_add_attrs(ds, metadata):
     """
     add attrs
     """
@@ -228,7 +228,7 @@ def ds_add_attrs(ds, metadata, INFO):
             'name': 'Pac',
             'long_name': 'Corrected pressure',
             'note': 'Corrected for variations in atmospheric pressure using nearby met station'})
-        add_attributes(ds['P_1ac'], metadata, INFO)
+        add_attributes(ds['P_1ac'], metadata, ds.attrs)
 
     ds['depth'].attrs.update({'units': 'm',
         'long_name': 'mean water depth',
@@ -285,7 +285,7 @@ def ds_add_attrs(ds, metadata, INFO):
         'note': 'distance is along profile from instrument head to center of bin'})
 
     for v in ['P_1', 'Tx_1211', 'AGC_1202', 'Hdg_1215', 'Ptch_1216', 'Roll_1217', 'u_1205', 'v_1206', 'w_1204', 'bin_depth', 'bindist']:
-        add_attributes(ds[v], metadata, INFO)
+        add_attributes(ds[v], metadata, ds.attrs)
 
     for v in ['u_1205', 'v_1206', 'w_1204']:
         add_vel_attributes(ds[v], metadata)
