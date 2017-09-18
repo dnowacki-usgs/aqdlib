@@ -138,6 +138,9 @@ def coord_transform(vel1, vel2, vel3, heading, pitch, roll, T, cs):
     return u, v, w
 
 def set_orientation(VEL, T, metadata):
+    """
+    Create depth variable depending on instrument orientation
+    """
     # TODO: this code seems too complicated. also should we really be modifying the trans matrix?
 
     N, M = np.shape(VEL['VEL1'])
@@ -186,7 +189,7 @@ def magvar_correct(VEL, metadata):
         print('No magnetic variation information provided; using zero for compass correction')
         magvardeg = 0
 
-    print('Rotating heading by %f degrees' % magvardeg)
+    print('Rotating heading and horizontal velocities by %f degrees' % magvardeg)
 
     VEL['Heading'] = VEL['Heading'] + magvardeg
     VEL['Heading'][VEL['Heading'] >= 360] = VEL['Heading'][VEL['Heading'] >= 360] - 360
@@ -196,8 +199,6 @@ def magvar_correct(VEL, metadata):
     vel2 = VEL['V'].copy()
 
     magvar = magvardeg * np.pi / 180
-
-    print('Rotating horizontal velocities by %f degrees' % magvardeg)
 
     VEL['U'] =  vel1 * np.cos(magvar) + vel2 * np.sin(magvar)
     VEL['V'] = -vel1 * np.sin(magvar) + vel2 * np.cos(magvar)
@@ -248,8 +249,6 @@ def trim_vel(VEL, metadata, waves=False):
 
     if 'trim_method' in metadata:
         if metadata['trim_method'].lower() == 'water level' or metadata['trim_method'].lower() == 'water level sl':
-            print('User instructed to trim data at the surface using pressure data')
-
             if metadata['trim_method'].lower() == 'water level':
                 print('Trimming using water level')
                 for var in ['U', 'V', 'W', 'AGC']:
@@ -267,6 +266,8 @@ def trim_vel(VEL, metadata, waves=False):
             VEL = VEL.isel(bindist=slice(0, lastbin))
 
             # TODO: need to add histcomment
+
+        # TODO: add other trim methods
 
     return VEL
 

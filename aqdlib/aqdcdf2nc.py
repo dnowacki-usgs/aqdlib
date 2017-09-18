@@ -7,6 +7,7 @@ def cdf_to_nc(cdf_filename, metadata, atmpres=False):
     Load a "raw" .cdf file and generate a processed .nc file
     """
 
+    # Load raw .cdf data
     VEL = load_cdf(cdf_filename, metadata, atmpres=atmpres)
 
     # Clip data to in/out water times or via good_ens
@@ -15,8 +16,10 @@ def cdf_to_nc(cdf_filename, metadata, atmpres=False):
     # Create water_depth variables
     VEL, metadata = qaqc.create_water_depth(VEL, metadata)
 
+    # Create depth variable depending on orientation
     VEL, T = qaqc.set_orientation(VEL, VEL['TransMatrix'].values, metadata)
 
+    # Transform coordinates from, most likely, BEAM to ENU
     u, v, w = qaqc.coord_transform(VEL['VEL1'].values, VEL['VEL2'].values, VEL['VEL3'].values,
         VEL['Heading'].values, VEL['Pitch'].values, VEL['Roll'].values, T, VEL.attrs['AQDCoordinateSystem'])
 
@@ -53,7 +56,7 @@ def cdf_to_nc(cdf_filename, metadata, atmpres=False):
     nc_filename = metadata['filename'] + '.nc'
 
     VEL.to_netcdf(nc_filename)
-    print('Done writing NetCDF file', nc_filename)
+    print('Done writing netCDF file', nc_filename)
 
     return VEL
 
