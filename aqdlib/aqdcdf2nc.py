@@ -78,32 +78,24 @@ def load_cdf(cdf_filename, metadata, atmpres=False):
 
 def clip_ds(ds, metadata):
 
+    print('first burst in full file:', ds['time'].min().values)
+    print('last burst in full file:', ds['time'].max().values)
+
     # clip either by ensemble indices or by the deployment and recovery date specified in metadata
     if 'good_ens' in metadata:
         # we have good ensemble indices in the metadata
         print('Using good_ens')
-        S = metadata['good_ens'][0]
-        E = metadata['good_ens'][1]
 
-        print('first burst in full file:', ds['time'].min().values)
-        print('last burst in full file:', ds['time'].max().values)
-
-        ds = ds.isel(time=slice(S,E))
-
-        print('first burst in trimmed file:', ds['time'].min().values)
-        print('last burst in trimmed file:', ds['time'].max().values)
+        ds = ds.isel(time=slice(metadata['good_ens'][0], metadata['good_ens'][1]))
 
     else:
         # we clip by the times in/out of water as specified in the metadata
         print('Using Deployment_date and Recovery_date')
 
-        print('first burst in full file:', ds['time'].min().values)
-        print('last burst in full file:', ds['time'].max().values)
-
         ds = ds.sel(time=slice(metadata['Deployment_date'], metadata['Recovery_date']))
 
-        print('first burst in trimmed file:', ds['time'].min().values)
-        print('last burst in trimmed file:', ds['time'].max().values)
+    print('first burst in trimmed file:', ds['time'].min().values)
+    print('last burst in trimmed file:', ds['time'].max().values)
 
     return ds
 
