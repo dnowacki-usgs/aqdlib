@@ -47,9 +47,9 @@ def cdf_to_nc(cdf_filename, metadata, atmpres=False):
     # swap_dims from bindist to depth
     VEL = ds_swap_dims(VEL)
 
-    VEL = ds_rename(VEL, metadata, INFO)
+    VEL = ds_rename(VEL)
 
-    VEL = ds_drop(VEL, metadata, INFO)
+    VEL = ds_drop(VEL)
 
     VEL = ds_add_attrs(VEL, metadata, INFO)
 
@@ -125,7 +125,7 @@ def da_reshape(ds, var):
 
     return ds
 
-def ds_rename(ds, metadata, INFO):
+def ds_rename(ds):
     """
     Rename DataArrays within Dataset for EPIC compliance
     """
@@ -147,7 +147,7 @@ def ds_rename(ds, metadata, INFO):
 
     return ds
 
-def ds_drop(ds, metadata, INFO):
+def ds_drop(ds):
     """
     Drop old DataArrays from Dataset that won't make it into the final .nc file
     """
@@ -172,7 +172,7 @@ def ds_add_attrs(ds, metadata, INFO):
     add attrs
     """
 
-    def add_vel_attributes(vel, metadata, INFO):
+    def add_vel_attributes(vel, metadata):
         vel.attrs.update({'units': 'cm/s',
             'data_cmnt': 'Velocity in shallowest bin is often suspect and should be used with caution'})
 
@@ -281,13 +281,13 @@ def ds_add_attrs(ds, metadata, INFO):
 
     ds['bindist'].attrs.update({'units': 'm',
         'long_name': 'distance from transducer head',
-        'blanking_distance': INFO['AQDBlankingDistance'],
+        'blanking_distance': ds.attrs['AQDBlankingDistance'],
         'note': 'distance is along profile from instrument head to center of bin'})
 
     for v in ['P_1', 'Tx_1211', 'AGC_1202', 'Hdg_1215', 'Ptch_1216', 'Roll_1217', 'u_1205', 'v_1206', 'w_1204', 'bin_depth', 'bindist']:
         add_attributes(ds[v], metadata, INFO)
 
     for v in ['u_1205', 'v_1206', 'w_1204']:
-        add_vel_attributes(ds[v], metadata, INFO)
+        add_vel_attributes(ds[v], metadata)
 
     return ds
