@@ -34,7 +34,7 @@ def cdf_to_nc(cdf_filename, metadata, atmpres=False):
 
     VEL['AGC'] = (VEL['AMP1'] + VEL['AMP2'] + VEL['AMP3']) / 3
 
-    VEL = qaqc.trim_vel(VEL, metadata, INFO)
+    VEL = qaqc.trim_vel(VEL, metadata)
 
     VEL = qaqc.make_bin_depth(VEL, metadata)
 

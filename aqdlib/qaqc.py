@@ -234,18 +234,16 @@ def create_water_depth(VEL, metadata):
 
     return VEL, metadata
 
-def trim_vel(VEL, metadata, INFO, waves=False):
+def trim_vel(VEL, metadata, waves=False):
     """Trim velocity data depending on specified method"""
-
-    N, M = np.shape(VEL['U'])
 
     if 'Pressure_ac' in VEL:
         print('Using atmospherically corrected pressure to trim')
-        WL = VEL['Pressure_ac'] + INFO['transducer_offset_from_bottom']
+        WL = VEL['Pressure_ac'] + VEL.attrs['transducer_offset_from_bottom']
     else:
         # FIXME incorporate press_ ac below
         print('Using NON-atmospherically corrected pressure to trim')
-        WL = VEL['Pressure'] + INFO['transducer_offset_from_bottom']
+        WL = VEL['Pressure'] + VEL.attrs['transducer_offset_from_bottom']
 
 
     if 'trim_method' in metadata:
@@ -259,7 +257,7 @@ def trim_vel(VEL, metadata, INFO, waves=False):
             elif metadata['trim_method'].lower() == 'water level sl':
                 print('Trimming using water level and sidelobes')
                 for var in ['U', 'V', 'W', 'AGC']:
-                    VEL[var] = VEL[var].where(VEL['bindist'] < VEL['Pressure'] * np.cos(np.deg2rad(INFO['AQDBeamAngle'])))
+                    VEL[var] = VEL[var].where(VEL['bindist'] < VEL['Pressure'] * np.cos(np.deg2rad(VEL.attrs['AQDBeamAngle'])))
 
             # find first bin that is all bad values
             # there might be a better way to do this using xarray and named dimensions, but this works for now
