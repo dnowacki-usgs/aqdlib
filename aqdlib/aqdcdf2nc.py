@@ -279,7 +279,12 @@ def ds_add_attrs(ds, metadata, INFO):
         'generic_name': 'roll',
         'epic_code': 1217})
 
-    for v in ['P_1', 'Tx_1211', 'AGC_1202', 'Hdg_1215', 'Ptch_1216', 'Roll_1217', 'u_1205', 'v_1206', 'w_1204', 'bin_depth']:
+    ds['bindist'].attrs.update({'units': 'm',
+        'long_name': 'distance from transducer head',
+        'blanking_distance': INFO['AQDBlankingDistance'],
+        'note': 'distance is along profile from instrument head to center of bin'})
+
+    for v in ['P_1', 'Tx_1211', 'AGC_1202', 'Hdg_1215', 'Ptch_1216', 'Roll_1217', 'u_1205', 'v_1206', 'w_1204', 'bin_depth', 'bindist']:
         add_attributes(ds[v], metadata, INFO)
 
     for v in ['u_1205', 'v_1206', 'w_1204']:
