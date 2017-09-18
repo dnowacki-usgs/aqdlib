@@ -12,9 +12,6 @@ def cdf_to_nc(cdf_filename, metadata, atmpres=False):
 
     VEL = load_cdf(cdf_filename, metadata, atmpres=atmpres)
 
-    # Create INFO dict with global attributes from dataset
-    INFO = VEL.attrs
-
     # Clip data to in/out water times or via good_ens
     VEL = clip_ds(VEL, metadata)
 
