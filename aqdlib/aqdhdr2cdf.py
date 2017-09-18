@@ -39,11 +39,6 @@ def prf_to_cdf(metadata):
     # TODO: logmeta code
 
     # FIXME
-
-
-    # Put in fill values
-    # print("about to insert fill values")
-    # FIXME
     # RAW = insert_fill_values(RAW)
 
     # configure file
@@ -57,7 +52,7 @@ def prf_to_cdf(metadata):
 
     RAW = qaqc.add_min_max(RAW)
 
-    # need tp drop datetime
+    # need to drop datetime
     RAW = RAW.drop('datetime')
     RAW.to_netcdf(cdf_filename)
 
@@ -94,12 +89,6 @@ def load_sen(metadata):
     RAW = RAW.rename({'index': 'time'})
     RAW['time'] = RAW['datetime']
 
-    # add 1d lon and lat dims
-    # RAW = RAW.expand_dims(('lon', 'lat'))
-
-    # put dimensions in correct order
-    # RAW = RAW.transpose('time', 'lon', 'lat')
-
     return RAW
 
 def check_orientation(RAW, metadata, waves=False):
@@ -116,7 +105,6 @@ def check_orientation(RAW, metadata, waves=False):
                                      num=metadata['bin_count'])
     else:
         bindist = RAW['cellpos'][0]
-
 
     if metadata['orientation'] == 'UP':
         print('User instructed that instrument was pointing UP')
