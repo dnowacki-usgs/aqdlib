@@ -21,7 +21,7 @@ def cdf_to_nc(cdf_filename, metadata, atmpres=False):
     # Create water_depth variables
     VEL, metadata = qaqc.create_water_depth(VEL, metadata)
 
-    VEL, T = qaqc.set_orientation(VEL, VEL['TransMatrix'].values, metadata, INFO)
+    VEL, T = qaqc.set_orientation(VEL, VEL['TransMatrix'].values, metadata)
 
     u, v, w = qaqc.coord_transform(VEL['VEL1'].values, VEL['VEL2'].values, VEL['VEL3'].values,
         VEL['Heading'].values, VEL['Pitch'].values, VEL['Roll'].values, T, VEL.attrs['AQDCoordinateSystem'])

@@ -137,25 +137,25 @@ def coord_transform(vel1, vel2, vel3, heading, pitch, roll, T, cs):
 
     return u, v, w
 
-def set_orientation(VEL, T, metadata, INFO):
+def set_orientation(VEL, T, metadata):
     # TODO: this code seems too complicated. also should we really be modifying the trans matrix?
 
     N, M = np.shape(VEL['VEL1'])
 
     if 'press_ac' in VEL:
-        Wdepth = np.nanmean(VEL['press_ac']) + INFO['transducer_offset_from_bottom']
+        Wdepth = np.nanmean(VEL['press_ac']) + VEL.attrs['transducer_offset_from_bottom']
     else:
-        Wdepth = np.nanmean(VEL['Pressure']) + INFO['transducer_offset_from_bottom']
+        Wdepth = np.nanmean(VEL['Pressure']) + VEL.attrs['transducer_offset_from_bottom']
 
-    blank2 = INFO['AQDBlankingDistance'] + INFO['transducer_offset_from_bottom']
-    binn = INFO['bin_size']
-    blank3 = INFO['transducer_offset_from_bottom'] - INFO['AQDBlankingDistance']
-    binc = INFO['bin_count']
+    blank2 = VEL.attrs['AQDBlankingDistance'] + VEL.attrs['transducer_offset_from_bottom']
+    binn = VEL.attrs['bin_size']
+    blank3 = VEL.attrs['transducer_offset_from_bottom'] - VEL.attrs['AQDBlankingDistance']
+    binc = VEL.attrs['bin_count']
 
-    if INFO['orientation'] == 'UP':
+    if VEL.attrs['orientation'] == 'UP':
         print('User instructed that instrument was pointing UP')
         VEL['depth'] = xr.DataArray(np.flipud(np.linspace(Wdepth - (binn * (M - 1) + blank2 + binn), Wdepth - (blank2 + binn), num=binc)), dims=('bindist')) # need to use flipud because 1d array
-    elif INFO['orientation'] == 'DOWN':
+    elif VEL.attrs['orientation'] == 'DOWN':
         print('User instructed that instrument was pointing DOWN')
         T[1,:] = -T[1,:]
         T[2,:] = -T[2,:]
