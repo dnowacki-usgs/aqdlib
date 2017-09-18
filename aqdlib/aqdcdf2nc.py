@@ -38,9 +38,6 @@ def cdf_to_nc(cdf_filename, metadata, atmpres=False):
 
     VEL = qaqc.make_bin_depth(VEL, metadata)
 
-    # TODO: Need to add all global attributes from CDF to NC file (or similar)
-    VEL = qaqc.add_min_max(VEL)
-
     VEL = qaqc.add_final_metadata(VEL)
 
     # Reshape and associate dimensions with lat/lon
@@ -55,6 +52,9 @@ def cdf_to_nc(cdf_filename, metadata, atmpres=False):
     VEL = ds_drop(VEL, metadata, INFO)
 
     VEL = ds_add_attrs(VEL, metadata, INFO)
+
+    # TODO: Need to add all global attributes from CDF to NC file (or similar)
+    VEL = qaqc.add_min_max(VEL)
 
     nc_filename = metadata['filename'] + '.nc'
 
