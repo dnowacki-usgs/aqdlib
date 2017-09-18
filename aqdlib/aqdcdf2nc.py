@@ -61,8 +61,6 @@ def cdf_to_nc(cdf_filename, metadata, atmpres=False):
     VEL.to_netcdf(nc_filename)
     print('Done writing NetCDF file', nc_filename)
 
-    print(VEL['u_1205'].attrs)
-
     return VEL
 
 def load_cdf(cdf_filename, metadata, atmpres=False):
@@ -99,28 +97,7 @@ def clip_ds(ds, metadata):
 
     return ds
 
-def define_aqd_nc_file(nc_filename, VEL, metadata, INFO):
-
-    # Assign COMPOSITE global attribute (formerly assigned at end)
-    VEL.attrs.update({'COMPOSITE': 0})
-
-    # VEL['depth'].attrs.update({'epic_code': 3})
-
-    with Dataset(nc_filename, 'w', format='NETCDF4', clobber=True) as rg:
-
-        # TODO: depth seems different from the cdf variable. this is a mean water depth
-        # depthid = rg.createVariable('depth', 'd', ('depth',), zlib=True)
-
-
-        # TODO: figure out how to cast DOUBLE_FILL to float
-        # TODO: why are these created as double precision, when Ellyn says they should be singles?
-        bindistid = rg.createVariable('bindist', 'd', ('depth',), zlib=True, fill_value=aqdlib.DOUBLE_FILL)
-        # TODO: Loop through the attribute names and values as done in Matlab
-        bindistid.blanking_distance = INFO['AQDBlankingDistance']
-        bindistid.initial_instrument_height = metadata['initial_instrument_height']
-        bindistid.note = 'distance is along profile from instrument head to center of bin'
-
-        # TODO: add analog input variables (OBS, NTU, etc)
+# TODO: add analog input variables (OBS, NTU, etc)
 
 def ds_swap_dims(ds):
 
@@ -257,7 +234,6 @@ def ds_add_attrs(ds, metadata, INFO):
         'nominal_instrument_depth': metadata['nominal_instrument_depth'],
         '_FillValue': 1e35,
         'epic_code': 3})
-
 
     ds['bin_depth'].attrs.update({'units': 'm',
         'name': 'bin depth'})
