@@ -1,26 +1,31 @@
+#!/usr/bin/env python
+
 from __future__ import division, print_function
 import numpy as np
 import datetime as dt
 import pytz
-from .aqdhdr2cdf import compute_time, read_aqd_hdr, check_metadata, check_orientation, define_aqd_cdf_file, write_aqd_cdf_data
+from aqdhdr2cdf import compute_time, read_aqd_hdr, check_metadata, check_orientation
 import pandas as pd
+import xarray as xr
 
-def wad_to_cdf(basefile, metadata):
+def wad_to_cdf(metadata):
     """Main waves load file"""
 
+    basefile = metadata['basefile']
+
+    # get instrument metadata from the HDR file
     instmeta = read_aqd_hdr(basefile)
 
-    RAW = {}
-    RAW['instmeta'] = instmeta
+    metadata['instmeta'] = instmeta
 
-    RAW = load_wad(RAW, basefile, metadata)
+    RAW = load_whd(metadata)
 
-    RAW = load_whd(RAW, basefile, metadata)
+    RAW = load_wad(RAW, metadata)
 
-    RAW = compute_time(RAW, instmeta)
+    RAW = compute_time(RAW, metadata)
 
     # Deal with metadata peculiarities
-    metadata = check_metadata(metadata, instmeta, waves=True)
+    metadata = check_metadata(metadata, waves=True)
     metadata['center_first_bin'] = RAW['cellpos'][0]
 
     print('BIN SIZE:', metadata['bin_size'])
@@ -31,65 +36,80 @@ def wad_to_cdf(basefile, metadata):
     cdf_filename = metadata['filename'] + 'wvs-raw.cdf' # TODO: fix the path
     print('Opening %s' % cdf_filename)
 
-    define_aqd_cdf_file(cdf_filename, RAW, metadata, waves=True)
-    print('Variables created')
+    # write out metadata
+    RAW = write_metadata(RAW, metadata)
+    RAW = write_metadata(RAW, metadata['instmeta'])
 
-    write_aqd_cdf_data(cdf_filename, RAW, metadata, waves=True)
-    print('Variables written')
+    
+    #
+    # write_aqd_cdf_data(cdf_filename, RAW, metadata, waves=True)
+    # print('Variables written')
+
+    print(RAW)
 
     return RAW, metadata
 
-def load_whd(RAW, basefile, metadata):
-    whdfile = basefile + '.whd'
-    print('Loading ' + whdfile)
-    WHD = np.loadtxt(whdfile)
+def load_whd(metadata):
+    """Load data from .whd file"""
 
-    RAW['burst'] = WHD[:,6]
-    RAW['nrecs'] = WHD[:,7]
-    RAW['cellpos'] = WHD[:,8]
-    RAW['battery'] = WHD[:,9]
-    RAW['soundspeed'] = WHD[:,10]
-    RAW['heading'] = WHD[:,11]
-    RAW['pitch'] = WHD[:,12]
-    RAW['roll'] = WHD[:,13]
-    RAW['minpressure'] = WHD[:,14]
-    RAW['temperature'] = WHD[:,16]
-    RAW['cellsize'] = WHD[:,17]
-    RAW['avgamp1'] = WHD[:,18]
-    RAW['avgamp2'] = WHD[:,19]
-    RAW['avgamp3'] = WHD[:,20]
+    whdfile = metadata['basefile'] + '.whd'
 
-    RAW['datetime'] = []
-    for year, month, day, hour, minute, second in zip(WHD[:,2], WHD[:,0], WHD[:,1], WHD[:,3], WHD[:,4], WHD[:,5]):
-        RAW['datetime'].append(dt.datetime(int(year), int(month), int(day), int(hour), int(minute), int(second), tzinfo=pytz.utc))
-    RAW['datetime'] = np.array(RAW['datetime'])
+    # read csv and parse dates
+    # https://stackoverflow.com/questions/27112591/parsing-year-month-day-hour-minute-second-in-python
+    def parse(year, month, day, hour, minute, second):
+        return year + '-' + month + '-' + day + ' ' + hour + ':' + minute + ':' + second
 
-    print('Done loading ' + whdfile)
+    WHD = pd.read_csv(whdfile, header=None, delim_whitespace=True,
+        parse_dates={'datetime': [2, 0, 1, 3, 4, 5]}, date_parser=parse, usecols=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 18, 19, 20])
+
+    # rename columns from numeric to human-readable
+    WHD.rename(columns={6: 'burst',
+        7: 'nrecs',
+        8: 'cellpos',
+        9: 'battery',
+        10: 'soundspeed',
+        11: 'heading',
+        12: 'pitch',
+        13: 'roll',
+        14: 'minpressure',
+        16: 'temperature',
+        17: 'cellsize',
+        18: 'avgamp1',
+        19: 'avgamp2',
+        20: 'avgamp3'},
+        inplace=True)
+
+    RAW = xr.Dataset.from_dataframe(WHD)
+    RAW = RAW.rename({'index': 'time'})
+    RAW['time'] = RAW['datetime']
 
     return RAW
 
-def load_wad(RAW, basefile, metadata):
+def load_wad(RAW, metadata):
 
-    wadfile = basefile + '.wad'
+    wadfile = metadata['basefile'] + '.wad'
     print('Loading wave data from ' + wadfile + '; this may take some time')
     # pd.read_csv is ~10x faster than np.loadtxt or np.genfromtxt
     WAD = pd.read_csv(wadfile, header=None, delim_whitespace=True).values
-    # WAD = np.loadtxt(wadfile)
 
     r, c = np.shape(WAD)
     print(r, c)
-    nburst = int(np.floor(r/RAW['instmeta']['WaveNumberOfSamples']))
-    nsamps = int(nburst * RAW['instmeta']['WaveNumberOfSamples'])
-    wavensamps = int(RAW['instmeta']['WaveNumberOfSamples'])
+    nburst = int(np.floor(r/metadata['instmeta']['WaveNumberOfSamples']))
+    nsamps = int(nburst * metadata['instmeta']['WaveNumberOfSamples'])
+    wavensamps = int(metadata['instmeta']['WaveNumberOfSamples'])
     print(nburst, nsamps, wavensamps)
 
-    RAW['pressure'] = np.reshape(WAD[0:nsamps, 2], (nburst, wavensamps)).T
-    RAW['VEL1'] = np.reshape(WAD[0:nsamps, 5], (nburst, wavensamps)).T
-    RAW['VEL2'] = np.reshape(WAD[0:nsamps, 6], (nburst, wavensamps)).T
-    RAW['VEL3'] = np.reshape(WAD[0:nsamps, 7], (nburst, wavensamps)).T
-    RAW['AMP1'] = np.reshape(WAD[0:nsamps, 9], (nburst, wavensamps)).T
-    RAW['AMP2'] = np.reshape(WAD[0:nsamps, 10], (nburst, wavensamps)).T
-    RAW['AMP3'] = np.reshape(WAD[0:nsamps, 11], (nburst, wavensamps)).T
+    samples = np.arange(wavensamps)
+
+    RAW['sample'] = xr.DataArray(samples, dims=('sample'), name='sample')
+
+    RAW['pressure'] = xr.DataArray(np.reshape(WAD[0:nsamps, 2], (nburst, wavensamps)), dims=('time', 'sample'))
+    RAW['VEL1'] = xr.DataArray(np.reshape(WAD[0:nsamps, 5], (nburst, wavensamps)), dims=('time', 'sample'))
+    RAW['VEL2'] = xr.DataArray(np.reshape(WAD[0:nsamps, 6], (nburst, wavensamps)), dims=('time', 'sample'))
+    RAW['VEL3'] = xr.DataArray(np.reshape(WAD[0:nsamps, 7], (nburst, wavensamps)), dims=('time', 'sample'))
+    RAW['AMP1'] = xr.DataArray(np.reshape(WAD[0:nsamps, 9], (nburst, wavensamps)), dims=('time', 'sample'))
+    RAW['AMP2'] = xr.DataArray(np.reshape(WAD[0:nsamps, 10], (nburst, wavensamps)), dims=('time', 'sample'))
+    RAW['AMP3'] = xr.DataArray(np.reshape(WAD[0:nsamps, 11], (nburst, wavensamps)), dims=('time', 'sample'))
 
     # convert to cm/s
     for n in [1, 2, 3]:
@@ -99,4 +119,31 @@ def load_wad(RAW, basefile, metadata):
 
     return RAW
 
-# %%
+def main():
+    import sys
+    sys.path.insert(0, '/Users/dnowacki/Documents/aqdlib')
+    import aqdlib
+    import argparse
+    import yaml
+
+    parser = argparse.ArgumentParser(description='Convert Aquadopp .wad wave files to raw .cdf format. Run this script from the directory containing Aquadopp files')
+    # parser.add_argument('basename', help='base name (without extension) of the Aquadopp text files')
+    parser.add_argument('gatts', help='path to global attributes file (gatts formatted)')
+    parser.add_argument('config', help='path to ancillary config file (YAML formatted)')
+    # parser.add_argument('-v', '--verbose', help='increase output verbosity', action='store_true')
+
+    args = parser.parse_args()
+
+    # initialize metadata from the globalatts file
+    metadata = aqdlib.read_globalatts(args.gatts)
+
+    # Add additional metadata from metadata config file
+    config = yaml.safe_load(open(args.config))
+
+    for k in config:
+        metadata[k] = config[k]
+
+    wad_to_cdf(metadata)
+
+if __name__ == '__main__':
+    main()
