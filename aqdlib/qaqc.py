@@ -44,8 +44,6 @@ def save_press_ac(cdf_filename, datetimes, p_1ac):
         Pressid[:] = p_1ac
 
 def add_final_metadata(ds):
-    # with nc.Dataset(cdf_filename, 'r+') as rg:
-        # rg.history = 'Processed to EPIC using aqdlib'
 
     ds.attrs.update({'history': 'Processed to EPIC using aqdlib'})
 
@@ -70,7 +68,7 @@ def add_min_max(ds):
     """
 
     exclude = ds.dims.keys()
-    exclude.extend(('time2', 'TIM'))
+    exclude.extend(('epic_time', 'epic_time2', 'time', 'time2', 'TIM'))
 
     for k in ds.keys():
         if k not in exclude:

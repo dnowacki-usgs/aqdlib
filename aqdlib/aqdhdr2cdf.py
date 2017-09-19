@@ -7,6 +7,7 @@ import aqdlib
 import qaqc
 import pandas as pd
 import xarray as xr
+import warnings
 
 def prf_to_cdf(metadata):
     """Main load file"""
@@ -50,15 +51,14 @@ def prf_to_cdf(metadata):
 
     update_attrs(cdf_filename, RAW, metadata)
 
-    RAW = qaqc.add_min_max(RAW)
+    # RAW = qaqc.add_min_max(RAW)
 
     # need to drop datetime
     RAW = RAW.drop('datetime')
-    RAW.to_netcdf(cdf_filename)
+
+    RAW.to_netcdf(cdf_filename, unlimited_dims='time')
 
     print('Finished writing data to %s' % cdf_filename)
-
-    print(RAW)
 
     return RAW
 
@@ -117,9 +117,12 @@ def check_orientation(RAW, metadata, waves=False):
         depth = (metadata['WATER_DEPTH'] - metadata['transducer_offset_from_bottom']) + bindist
         Depth_NOTE = 'user reports downlooking bin depths = water_depth - transducer_offset_from_bottom + bindist' # TODO: this is never used
 
-    RAW['bindist'] = xr.DataArray(bindist, dims=('bindist'), name='bindist')
-
-    RAW['depth'] = xr.DataArray(depth, dims=('bindist'), name='depth')
+    if not waves:
+        RAW['bindist'] = xr.DataArray(bindist, dims=('bindist'), name='bindist')
+        RAW['depth'] = xr.DataArray(depth, dims=('bindist'), name='depth')
+    else:
+        RAW['bindist'] = xr.DataArray([bindist], dims=('bindist'), name='bindist')
+        RAW['depth'] = xr.DataArray([depth], dims=('bindist'), name='depth')
 
     return RAW
 
@@ -304,9 +307,6 @@ def update_attrs(cdf_filename, RAW, metadata, waves=False):
 def write_metadata(ds, metadata):
     """Write out all metadata to CDF file"""
 
-    # for k in metadata.keys():
-    #     setattr(rg, k, metadata[k])
-
     for k in metadata:
         if k != 'instmeta': # don't want to write out instmeta dict, call it separately
             ds.attrs.update({k: metadata[k]})
@@ -318,17 +318,24 @@ def compute_time(RAW, metadata):
 
     # shift times to center of ensemble
     # FIXME: this forces to int and does not check to see if there is a remainder
-    RAW['time'] = RAW['time'] + np.timedelta64(int(metadata['instmeta']['AQDAverageInterval']/2), 's')
+    timeshift = metadata['instmeta']['AQDAverageInterval']/2
+    if timeshift.is_integer():
+        RAW['time'] = RAW['time'] + np.timedelta64(int(timeshift), 's')
+        print('Time shifted by:', int(timeshift), 's')
+    else:
+        warnings.warn('time NOT shifted because not a whole number of seconds: %f s ***' % timeshift)
 
     # create Julian date
     RAW['jd'] = RAW['time'].to_dataframe().index.to_julian_date() + 0.5
 
     RAW['epic_time'] = np.floor(RAW['jd'])
     if np.all(np.mod(RAW['epic_time'], 1) == 0): # make sure they are all integers, and then cast as such
-        RAW['epic_time'] = RAW['epic_time'].astype(int)
+        RAW['epic_time'] = RAW['epic_time'].astype(np.int32)
+    else:
+        warnings.warn('not all EPIC time values are integers; this will cause problems with time and time2')
 
     # TODO: Hopefully this is correct... roundoff errors on big numbers...
-    RAW['epic_time2'] = (RAW['jd'] - np.floor(RAW['jd']))*86400000
+    RAW['epic_time2'] = np.round((RAW['jd'] - np.floor(RAW['jd']))*86400000).astype(np.int32)
 
     return RAW
 
