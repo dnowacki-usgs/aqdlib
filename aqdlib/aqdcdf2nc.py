@@ -3,6 +3,7 @@
 from __future__ import division, print_function
 import xarray as xr
 import qaqc
+import netCDF4
 
 def cdf_to_nc(cdf_filename, metadata, atmpres=False):
     """
@@ -60,6 +61,11 @@ def cdf_to_nc(cdf_filename, metadata, atmpres=False):
     VEL.to_netcdf(nc_filename, unlimited_dims='time')
     print('Done writing netCDF file', nc_filename)
 
+    # rename time variables after the fact to conform with EPIC/CMG standards
+    rename_time(nc_filename)
+
+    print('Renamed dimensions')
+
     return VEL
 
 def load_cdf(cdf_filename, metadata, atmpres=False):
@@ -97,6 +103,25 @@ def clip_ds(ds, metadata):
     return ds
 
 # TODO: add analog input variables (OBS, NTU, etc)
+
+def rename_time(nc_filename):
+    """
+    Rename time variables. Need to use netCDF4 module since xarray seems to have
+    issues with the naming of time variables/dimensions
+    """
+
+    nc = netCDF4.Dataset(nc_filename, 'r+')
+    timebak = nc['epic_time'][:]
+    nc.renameVariable('time', 'time_cf')
+    nc.renameVariable('epic_time', 'time')
+    nc.renameVariable('epic_time2', 'time2')
+    nc.close()
+
+    # need to do this in two steps after renaming the variable
+    # not sure why, but it works this way
+    nc = netCDF4.Dataset(nc_filename, 'r+')
+    nc['time'][:] = timebak
+    nc.close()
 
 def ds_swap_dims(ds):
 
