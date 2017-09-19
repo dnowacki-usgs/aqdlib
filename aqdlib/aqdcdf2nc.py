@@ -189,17 +189,29 @@ def ds_add_attrs(ds, metadata):
     ds.attrs.update({'COMPOSITE': 0})
 
     # Update attributes for EPIC and STG compliance
-    ds.lat.encoding['_FillValue'] = 1e35
+    ds.lat.encoding['_FillValue'] = False
+    ds.lon.encoding['_FillValue'] = False
+    ds.depth.encoding['_FillValue'] = False
 
-    ds.lon.encoding['_FillValue'] = 1e35
+    ds['time'].attrs.update({'standard_name': 'time',
+        'axis': 'T',
+        '_FillValue': False})
 
     ds['epic_time'].attrs.update({'units': 'True Julian Day',
         'type': 'EVEN',
-        'epic_code': 624})
+        'epic_code': 624,
+        '_FillValue': False})
 
     ds['epic_time2'].attrs.update({'units': 'msec since 0:00 GMT',
         'type': 'EVEN',
-        'epic_code': 624})
+        'epic_code': 624,
+        '_FillValue': False})
+
+    ds['depth'].attrs.update({'units': 'm',
+        'long_name': 'mean water depth',
+        'initial_instrument_height': metadata['initial_instrument_height'],
+        'nominal_instrument_depth': metadata['nominal_instrument_depth'],
+        'epic_code': 3})
 
     ds['u_1205'].attrs.update({'name': 'u',
         'long_name': 'Eastward Velocity',
@@ -228,13 +240,6 @@ def ds_add_attrs(ds, metadata):
             'long_name': 'Corrected pressure',
             'note': 'Corrected for variations in atmospheric pressure using nearby met station'})
         add_attributes(ds['P_1ac'], metadata, ds.attrs)
-
-    ds['depth'].attrs.update({'units': 'm',
-        'long_name': 'mean water depth',
-        'initial_instrument_height': metadata['initial_instrument_height'],
-        'nominal_instrument_depth': metadata['nominal_instrument_depth'],
-        '_FillValue': 1e35,
-        'epic_code': 3})
 
     ds['bin_depth'].attrs.update({'units': 'm',
         'name': 'bin depth'})
