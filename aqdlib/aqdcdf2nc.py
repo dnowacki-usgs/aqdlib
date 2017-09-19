@@ -125,9 +125,12 @@ def rename_time(nc_filename):
 
 def ds_swap_dims(ds):
 
-    # ds['depth'] = xr.DataArray(ds['depth'].values, dims=('bindist'))
     ds = ds.swap_dims({'bindist': 'depth'})
-    # ds['bindist'] = ds['bindist'].swap_dims({'bindist': 'depth'})
+
+    # need to swap dims and then reassign bindist to be a normal variable (no longer a coordinate)
+    valbak = ds['bindist'].values
+    ds = ds.drop('bindist')
+    ds['bindist'] = xr.DataArray(valbak, dims='depth')
 
     return ds
 
@@ -185,7 +188,9 @@ def ds_drop(ds):
         'Battery',
         'TransMatrix',
         'AnalogInput1',
-        'AnalogInput2']
+        'AnalogInput2',
+        'jd',
+        'Depth']
 
     ds = ds.drop(todrop)
 
