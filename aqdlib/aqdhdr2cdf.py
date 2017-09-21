@@ -16,6 +16,11 @@ import netCDF4
 def prf_to_cdf(metadata):
     """Main load file"""
 
+    # TODO: clock drift code
+    # TODO: Move time to center of ensemble??
+    # TODO: logmeta code
+    # FIXME: Are fillvalues being inserted properly?
+
     basefile = metadata['basefile']
 
     # get instrument metadata from the HDR file
@@ -39,13 +44,6 @@ def prf_to_cdf(metadata):
     # Compute time stamps
     RAW = compute_time(RAW, metadata)
 
-    # TODO: clock drift code
-    # TODO: Move time to center of ensemble??
-    # TODO: logmeta code
-
-    # FIXME
-    # RAW = insert_fill_values(RAW)
-
     # configure file
     cdf_filename = metadata['filename'] + '-raw.cdf'
 
@@ -54,8 +52,6 @@ def prf_to_cdf(metadata):
     RAW = write_metadata(RAW, metadata['instmeta'])
 
     update_attrs(cdf_filename, RAW, metadata)
-
-    # RAW = qaqc.add_min_max(RAW)
 
     # need to drop datetime
     RAW = RAW.drop('datetime')
@@ -222,18 +218,23 @@ def update_attrs(cdf_filename, RAW, metadata, waves=False):
             'Type': 'scalar',
             'transducer_offset_from_bottom': metadata['transducer_offset_from_bottom'] })
 
+    if not waves:
+        veltxt = 'current velocity'
+    else:
+        veltxt = 'wave-burst velocity'
+
     if metadata['instmeta']['AQDCoordinateSystem'] == 'ENU':
-        RAW['VEL1'].attrs.update({'long_name': 'Eastward current velocity'})
-        RAW['VEL2'].attrs.update({'long_name': 'Northward current velocity'})
-        RAW['VEL3'].attrs.update({'long_name': 'Vertical current velocity'})
+        RAW['VEL1'].attrs.update({'long_name': 'Eastward ' + veltxt})
+        RAW['VEL2'].attrs.update({'long_name': 'Northward ' + veltxt})
+        RAW['VEL3'].attrs.update({'long_name': 'Vertical ' + veltxt})
     elif metadata['instmeta']['AQDCoordinateSystem'] == 'XYZ':
-        RAW['VEL1'].attrs.update({'long_name': 'Current velocity in X Direction'})
-        RAW['VEL2'].attrs.update({'long_name': 'Current velocity in Y Direction'})
-        RAW['VEL3'].attrs.update({'long_name': 'Current velocity in Z Direction'})
+        RAW['VEL1'].attrs.update({'long_name': veltxt.capitalize() + ' in X Direction'})
+        RAW['VEL2'].attrs.update({'long_name': veltxt.capitalize() + ' in Y Direction'})
+        RAW['VEL3'].attrs.update({'long_name': veltxt.capitalize() + ' in Z Direction'})
     elif metadata['instmeta']['AQDCoordinateSystem'] == 'BEAM':
-        RAW['VEL1'].attrs.update({'long_name': 'Beam 1 current velocity'})
-        RAW['VEL2'].attrs.update({'long_name': 'Beam 2 current velocity'})
-        RAW['VEL3'].attrs.update({'long_name': 'Beam 3 current velocity'})
+        RAW['VEL1'].attrs.update({'long_name': 'Beam 1 ' + veltxt})
+        RAW['VEL2'].attrs.update({'long_name': 'Beam 2 ' + veltxt})
+        RAW['VEL3'].attrs.update({'long_name': 'Beam 3 ' + veltxt})
 
     RAW['Battery'].attrs.update({'units': 'Volts',
         'long_name': 'Battery Voltage'})
@@ -319,12 +320,16 @@ def write_metadata(ds, metadata):
 
     return ds
 
-def compute_time(RAW, metadata):
+def compute_time(RAW, metadata, waves=False):
     """Compute Julian date and then time and time2 for use in NetCDF file"""
 
     # shift times to center of ensemble
     # FIXME: this forces to int and does not check to see if there is a remainder
-    timeshift = metadata['instmeta']['AQDAverageInterval']/2
+    if not waves:
+        timeshift = metadata['instmeta']['AQDAverageInterval']/2
+    else:
+        timeshift = metadata['instmeta']['WaveInterval']/2
+
     if timeshift.is_integer():
         RAW['time'] = RAW['time'] + np.timedelta64(int(timeshift), 's')
         print('Time shifted by:', int(timeshift), 's')

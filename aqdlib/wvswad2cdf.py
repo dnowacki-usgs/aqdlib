@@ -4,7 +4,9 @@ from __future__ import division, print_function
 import numpy as np
 import datetime as dt
 import pytz
-from aqdhdr2cdf import compute_time, read_aqd_hdr, check_metadata, check_orientation
+import sys
+sys.path.insert(0, '/Users/dnowacki/Documents/aqdlib')
+from aqdlib.aqdhdr2cdf import compute_time, read_aqd_hdr, check_orientation, check_metadata, write_metadata, update_attrs
 import pandas as pd
 import xarray as xr
 
@@ -26,26 +28,31 @@ def wad_to_cdf(metadata):
 
     # Deal with metadata peculiarities
     metadata = check_metadata(metadata, waves=True)
-    metadata['center_first_bin'] = RAW['cellpos'][0]
+
+    metadata['center_first_bin'] = RAW['cellpos'][0].values
 
     print('BIN SIZE:', metadata['bin_size'])
 
     RAW = check_orientation(RAW, metadata, waves=True)
 
+    # Compute time stamps
+    RAW = compute_time(RAW, metadata, waves=True)
+
     # configure file
     cdf_filename = metadata['filename'] + 'wvs-raw.cdf' # TODO: fix the path
-    print('Opening %s' % cdf_filename)
 
     # write out metadata
     RAW = write_metadata(RAW, metadata)
     RAW = write_metadata(RAW, metadata['instmeta'])
 
-    
-    #
-    # write_aqd_cdf_data(cdf_filename, RAW, metadata, waves=True)
-    # print('Variables written')
+    update_attrs(cdf_filename, RAW, metadata, waves=True)
 
-    print(RAW)
+    # need to drop datetime
+    RAW = RAW.drop('datetime')
+
+    RAW.to_netcdf(cdf_filename, unlimited_dims='time')
+
+    print('Finished writing data to %s' % cdf_filename)
 
     return RAW, metadata
 
@@ -66,13 +73,13 @@ def load_whd(metadata):
     WHD.rename(columns={6: 'burst',
         7: 'nrecs',
         8: 'cellpos',
-        9: 'battery',
+        9: 'Battery',
         10: 'soundspeed',
-        11: 'heading',
-        12: 'pitch',
-        13: 'roll',
+        11: 'Heading',
+        12: 'Pitch',
+        13: 'Roll',
         14: 'minpressure',
-        16: 'temperature',
+        16: 'Temperature',
         17: 'cellsize',
         18: 'avgamp1',
         19: 'avgamp2',
@@ -103,7 +110,7 @@ def load_wad(RAW, metadata):
 
     RAW['sample'] = xr.DataArray(samples, dims=('sample'), name='sample')
 
-    RAW['pressure'] = xr.DataArray(np.reshape(WAD[0:nsamps, 2], (nburst, wavensamps)), dims=('time', 'sample'))
+    RAW['Pressure'] = xr.DataArray(np.reshape(WAD[0:nsamps, 2], (nburst, wavensamps)), dims=('time', 'sample'))
     RAW['VEL1'] = xr.DataArray(np.reshape(WAD[0:nsamps, 5], (nburst, wavensamps)), dims=('time', 'sample'))
     RAW['VEL2'] = xr.DataArray(np.reshape(WAD[0:nsamps, 6], (nburst, wavensamps)), dims=('time', 'sample'))
     RAW['VEL3'] = xr.DataArray(np.reshape(WAD[0:nsamps, 7], (nburst, wavensamps)), dims=('time', 'sample'))
