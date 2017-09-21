@@ -1,17 +1,29 @@
 from __future__ import division, print_function
-import numpy as np
+import csv
 
 def read_globalatts(fname):
-    a = np.genfromtxt(fname, delimiter=';', dtype=None, autostrip=True)
+    """
+    Read global attributes file (glob_attxxxx.txt) and create metadata structure
+    """
+
     metadata = {}
-    for row in a:
-        if row[0] == 'MOORING':
-            metadata[row[0]] = row[1]
-        else:
-            metadata[row[0]] = str2num(row[1])
-    return metadata
+
+    with open(fname, 'r') as csvfile:
+        a = csv.reader(csvfile, delimiter=';')
+
+        for row in a:
+            if row[0] == 'MOORING':
+                metadata[row[0].strip()] = row[1].strip()
+            else:
+                metadata[row[0].strip()] = str2num(row[1].strip())
+
+        return metadata
 
 def str2num(s):
+    """
+    Convert string to float if possible
+    """
+    
     try:
         float(s)
         return float(s)
