@@ -311,6 +311,8 @@ def write_metadata(ds, metadata):
         if k != 'instmeta': # don't want to write out instmeta dict, call it separately
             ds.attrs.update({k: metadata[k]})
 
+    ds.attrs.update({'history': 'Processed using aqdhdr2cdf.py with Python ' + platform.python_version() + ', xarray ' + xr.__version__ + ', NumPy ' + np.__version__ + ', netCDF4 ' + netCDF4.__version__})
+
     return ds
 
 def compute_time(RAW, metadata):

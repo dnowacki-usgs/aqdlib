@@ -91,11 +91,15 @@ def clip_ds(ds, metadata):
 
         ds = ds.isel(time=slice(metadata['good_ens'][0], metadata['good_ens'][1]))
 
+        ds.attrs['history'] = 'Data clipped using good_ens values of ' + metadata['good_ens'][0] + ', ' + metadata['good_ens'][1] + '. ' + ds.attrs['history']
+
     else:
         # we clip by the times in/out of water as specified in the metadata
         print('Using Deployment_date and Recovery_date')
 
         ds = ds.sel(time=slice(metadata['Deployment_date'], metadata['Recovery_date']))
+
+        ds.attrs['history'] = 'Data clipped using Deployment_date and Recovery_date of ' + metadata['Deployment_date'] + ', ' + metadata['Recovery_date'] + '. ' + ds.attrs['history']
 
     print('first burst in trimmed file:', ds['time'].min().values)
     print('last burst in trimmed file:', ds['time'].max().values)
@@ -213,8 +217,8 @@ def ds_add_attrs(ds, metadata):
         var.attrs.update({'serial_number': INFO['AQDSerial_Number'],
             'initial_instrument_height': metadata['initial_instrument_height'],
             'nominal_instrument_depth': metadata['nominal_instrument_depth'],
-            'height_depth_units': 'm', 'sensor_type': INFO['INST_TYPE'],
-            '_FillValue': 1e35})
+            'height_depth_units': 'm', 'sensor_type': INFO['INST_TYPE']})
+        var.encoding['_FillValue'] = 1e35
 
     ds.attrs.update({'COMPOSITE': 0})
 
@@ -222,20 +226,20 @@ def ds_add_attrs(ds, metadata):
     ds.lat.encoding['_FillValue'] = False
     ds.lon.encoding['_FillValue'] = False
     ds.depth.encoding['_FillValue'] = False
+    ds.time.encoding['_FillValue'] = False
+    ds.epic_time.encoding['_FillValue'] = False
+    ds.epic_time2.encoding['_FillValue'] = False
 
     ds['time'].attrs.update({'standard_name': 'time',
-        'axis': 'T',
-        '_FillValue': False})
+        'axis': 'T'})
 
     ds['epic_time'].attrs.update({'units': 'True Julian Day',
         'type': 'EVEN',
-        'epic_code': 624,
-        '_FillValue': False})
+        'epic_code': 624})
 
     ds['epic_time2'].attrs.update({'units': 'msec since 0:00 GMT',
         'type': 'EVEN',
-        'epic_code': 624,
-        '_FillValue': False})
+        'epic_code': 624})
 
     ds['depth'].attrs.update({'units': 'm',
         'long_name': 'mean water depth',
@@ -267,9 +271,13 @@ def ds_add_attrs(ds, metadata):
     if 'P_1ac' in ds:
         ds['P_1ac'].attrs.update({'units': 'dbar',
             'name': 'Pac',
-            'long_name': 'Corrected pressure',
-            'note': 'Corrected for variations in atmospheric pressure using nearby met station'})
+            'long_name': 'Corrected pressure'})
+        if 'P_1ac_note' in metadata:
+            ds['P_1ac'].attrs.update({'note': metadata['P_1ac_note']})
+
         add_attributes(ds['P_1ac'], metadata, ds.attrs)
+
+        ds.attrs['history'] = 'Atmospheric pressure compensated. ' + ds.attrs['history']
 
     ds['bin_depth'].attrs.update({'units': 'm',
         'name': 'bin depth'})

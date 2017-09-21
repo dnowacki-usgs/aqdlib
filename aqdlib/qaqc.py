@@ -45,7 +45,14 @@ def save_press_ac(cdf_filename, datetimes, p_1ac):
 
 def add_final_metadata(ds):
 
-    ds.attrs.update({'history': 'Processed to EPIC using aqdlib'})
+    ds.attrs['history'] = 'Processed to EPIC using aqdcdf2nc.py. ' + ds.attrs['history']
+
+    # set DELTA_T attribute for EPIC compliance.
+    ds.attrs.update({'DELTA_T': ds.attrs['AQDProfileInterval']})
+
+    # print (ds['time'][0].values.astype(str))
+    ds.attrs.update({'start_time': ds['time'][0].values.astype(str),
+        'stop_time': ds['time'][-1].values.astype(str)})
 
     return ds
 
