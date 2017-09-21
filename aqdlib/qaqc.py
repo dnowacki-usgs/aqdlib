@@ -74,10 +74,10 @@ def add_min_max(ds):
     This function assumes the data are in xarray DataArrays within Datasets
     """
 
-    exclude = ds.dims.keys()
+    exclude = list(ds.dims)
     exclude.extend(('epic_time', 'epic_time2', 'time', 'time2', 'TIM'))
 
-    for k in ds.keys():
+    for k in ds:
         if k not in exclude:
             ds[k].attrs.update({'minimum': ds[k].min().values, 'maximum': ds[k].max().values})
 
