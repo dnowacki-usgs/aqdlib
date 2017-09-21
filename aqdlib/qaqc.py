@@ -43,12 +43,18 @@ def save_press_ac(cdf_filename, datetimes, p_1ac):
         timeid[:] = nc.date2num(datetimes, units=timeid.units, calendar=timeid.calendar)
         Pressid[:] = p_1ac
 
-def add_final_metadata(ds):
+def add_final_metadata(ds, waves=False):
 
-    ds.attrs['history'] = 'Processed to EPIC using aqdcdf2nc.py. ' + ds.attrs['history']
+    if not waves:
+        ds.attrs['history'] = 'Processed to EPIC using aqdcdf2nc.py. ' + ds.attrs['history']
 
-    # set DELTA_T attribute for EPIC compliance.
-    ds.attrs.update({'DELTA_T': ds.attrs['AQDProfileInterval']})
+        # set DELTA_T attribute for EPIC compliance.
+        ds.attrs.update({'DELTA_T': ds.attrs['AQDProfileInterval']})
+    else:
+        ds.attrs['history'] = 'Processed to EPIC using wvscdf2nc.py. ' + ds.attrs['history']
+
+        # set DELTA_T attribute for EPIC compliance.
+        ds.attrs.update({'DELTA_T': ds.attrs['WaveInterval']})
 
     # print (ds['time'][0].values.astype(str))
     ds.attrs.update({'start_time': ds['time'][0].values.astype(str),
