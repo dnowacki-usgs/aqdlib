@@ -2,6 +2,8 @@
 
 from __future__ import division, print_function
 import xarray as xr
+import sys
+sys.path.insert(0, '/Users/dnowacki/Documents/aqdlib')
 import qaqc
 import netCDF4
 

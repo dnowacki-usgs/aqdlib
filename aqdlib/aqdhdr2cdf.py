@@ -3,11 +3,15 @@
 from __future__ import division, print_function
 import numpy as np
 # from aqdlib import aqdlib.DOUBLE_FILL
+import sys
+sys.path.insert(0, '/Users/dnowacki/Documents/aqdlib')
 import aqdlib
 import qaqc
 import pandas as pd
 import xarray as xr
 import warnings
+import platform
+import netCDF4
 
 def prf_to_cdf(metadata):
     """Main load file"""
