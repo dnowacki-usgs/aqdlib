@@ -21,28 +21,6 @@ def load_cdf(cdf_filename, varis, squeeze_me=False):
 
         return RAW
 
-def load_press_ac(cdf_filename, varis):
-    with nc.Dataset(cdf_filename, 'r') as rg:
-        press_ac = {}
-        press_ac['time'] = rg['time'][:]
-        press_ac['p_1ac'] = rg['p_1ac'][:]
-        press_ac['datetime'] = nc.num2date(press_ac['time'], units=rg['time'].units, calendar=rg['time'].calendar)
-
-        return press_ac
-
-def save_press_ac(cdf_filename, datetimes, p_1ac):
-    with nc.Dataset(cdf_filename, 'w', format='NETCDF4', clobber=True) as rg:
-        time = rg.createDimension('time', 0)
-
-        timeid = rg.createVariable('time', 'f8', ('time',))
-        timeid.units = 'hours since 0001-01-01 00:00:00.0'
-        timeid.calendar = 'gregorian'
-
-        Pressid = rg.createVariable('p_1ac', 'f', ('time',), fill_value=False)
-
-        timeid[:] = nc.date2num(datetimes, units=timeid.units, calendar=timeid.calendar)
-        Pressid[:] = p_1ac
-
 def add_final_metadata(ds, waves=False):
 
     if not waves:

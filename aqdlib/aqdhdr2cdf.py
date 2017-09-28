@@ -13,6 +13,7 @@ import warnings
 import platform
 import netCDF4
 
+
 def prf_to_cdf(metadata):
     """Main load file"""
 
@@ -62,6 +63,7 @@ def prf_to_cdf(metadata):
 
     return RAW
 
+
 def load_sen(metadata):
     """Load data from .sen file"""
 
@@ -90,6 +92,7 @@ def load_sen(metadata):
     RAW['time'] = RAW['datetime']
 
     return RAW
+
 
 def check_orientation(RAW, metadata, waves=False):
     """Check instrument orientation and create variables that depend on this"""
@@ -125,6 +128,7 @@ def check_orientation(RAW, metadata, waves=False):
         RAW['depth'] = xr.DataArray([depth], dims=('bindist'), name='depth')
 
     return RAW
+
 
 def check_metadata(metadata, waves=False):
 
@@ -173,6 +177,7 @@ def check_metadata(metadata, waves=False):
     metadata['INST_TYPE'] = 'Nortek Aquadopp Profiler';
 
     return metadata
+
 
 def update_attrs(cdf_filename, RAW, metadata, waves=False):
     """Define dimensions and variables in NetCDF file"""
@@ -309,6 +314,7 @@ def update_attrs(cdf_filename, RAW, metadata, waves=False):
     #         #         netcdf.putAtt(ncid,Ana1id,'SEDcoef',metadata.AnalogInput1.cals.SEDcoef);
     #         # end
 
+
 def write_metadata(ds, metadata):
     """Write out all metadata to CDF file"""
 
@@ -320,11 +326,11 @@ def write_metadata(ds, metadata):
 
     return ds
 
+
 def compute_time(RAW, metadata, waves=False):
     """Compute Julian date and then time and time2 for use in NetCDF file"""
 
     # shift times to center of ensemble
-    # FIXME: this forces to int and does not check to see if there is a remainder
     if not waves:
         timeshift = metadata['instmeta']['AQDAverageInterval']/2
     else:
@@ -350,6 +356,7 @@ def compute_time(RAW, metadata, waves=False):
 
     return RAW
 
+
 def load_amp_vel(RAW, basefile):
     """Load amplitude and velocity data from the .aN and .vN files"""
 
@@ -364,6 +371,7 @@ def load_amp_vel(RAW, basefile):
         RAW['VEL' + str(n)] = xr.DataArray(v * 100, dims=('time', 'bindist'), coords=[RAW['time'], RAW['bindist']])
 
     return RAW
+
 
 def read_aqd_hdr(basefile):
     """
@@ -525,6 +533,7 @@ def read_aqd_hdr(basefile):
 
     return Instmeta
 
+
 def insert_fill_values(RAW):
     """Insert fill values for nans"""
 
@@ -535,6 +544,7 @@ def insert_fill_values(RAW):
             RAW[k][nanind] = aqdlib.DOUBLE_FILL
 
     return RAW
+
 
 def main():
     import sys
