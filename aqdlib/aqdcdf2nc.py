@@ -7,6 +7,7 @@ sys.path.insert(0, '/Users/dnowacki/Documents/aqdlib')
 import qaqc
 import netCDF4
 
+
 def cdf_to_nc(cdf_filename, metadata, atmpres=False):
     """
     Load a "raw" .cdf file and generate a processed .nc file
@@ -70,6 +71,7 @@ def cdf_to_nc(cdf_filename, metadata, atmpres=False):
 
     return VEL
 
+
 def load_cdf(cdf_filename, metadata, atmpres=False):
 
     ds = xr.open_dataset(cdf_filename, autoclose=True)
@@ -80,6 +82,7 @@ def load_cdf(cdf_filename, metadata, atmpres=False):
         ds['Pressure_ac'] = xr.DataArray(ds['Pressure'] - (p['atmpres'] - p['atmpres'].offset))
 
     return ds
+
 
 def clip_ds(ds, metadata):
 
@@ -110,6 +113,7 @@ def clip_ds(ds, metadata):
 
 # TODO: add analog input variables (OBS, NTU, etc)
 
+
 def rename_time(nc_filename):
     """
     Rename time variables. Need to use netCDF4 module since xarray seems to have
@@ -129,6 +133,7 @@ def rename_time(nc_filename):
     nc['time'][:] = timebak
     nc.close()
 
+
 def ds_swap_dims(ds):
 
     ds = ds.swap_dims({'bindist': 'depth'})
@@ -139,6 +144,7 @@ def ds_swap_dims(ds):
     ds['bindist'] = xr.DataArray(valbak, dims='depth')
 
     return ds
+
 
 def da_reshape(ds, var):
     """
@@ -157,6 +163,7 @@ def da_reshape(ds, var):
         ds[var] = ds[var].transpose('time', 'lon', 'lat')
 
     return ds
+
 
 def ds_rename(ds):
     """
@@ -180,6 +187,7 @@ def ds_rename(ds):
 
     return ds
 
+
 def ds_drop(ds):
     """
     Drop old DataArrays from Dataset that won't make it into the final .nc file
@@ -201,6 +209,7 @@ def ds_drop(ds):
     ds = ds.drop(todrop)
 
     return ds
+
 
 def ds_add_attrs(ds, metadata):
     """
@@ -336,6 +345,7 @@ def ds_add_attrs(ds, metadata):
 
     return ds
 
+
 def main():
     import sys
     sys.path.insert(0, '/Users/dnowacki/Documents/aqdlib')
@@ -361,7 +371,6 @@ def main():
         metadata[k] = config[k]
 
     if args.atmpres:
-        # press_ac = aqdlib.load_press_ac('press_ac.cdf', ['p_1ac'])
         VEL = cdf_to_nc(args.cdfname, metadata, atmpres=args.atmpres)
     else:
         VEL = cdf_to_nc(args.cdfname, metadata)
