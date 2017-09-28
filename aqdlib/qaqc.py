@@ -134,8 +134,8 @@ def set_orientation(VEL, T, metadata):
 
     N, M = np.shape(VEL['VEL1'])
 
-    if 'press_ac' in VEL:
-        Wdepth = np.nanmean(VEL['press_ac']) + VEL.attrs['transducer_offset_from_bottom']
+    if 'Pressure_ac' in VEL:
+        Wdepth = np.nanmean(VEL['Pressure_ac']) + VEL.attrs['transducer_offset_from_bottom']
     else:
         Wdepth = np.nanmean(VEL['Pressure']) + VEL.attrs['transducer_offset_from_bottom']
 
@@ -158,11 +158,9 @@ def set_orientation(VEL, T, metadata):
 def make_bin_depth(VEL, metadata):
     """Create bin_depth variable"""
 
-    if 'press_ac' in VEL:
-        # VEL['bin_depth'] = np.tile(VEL['press_ac'], (M, 1)) - np.tile(VEL['bindist'], (N, 1)).T;
-        VEL['bin_depth'] = VEL['press_ac'] - VEL['bindist']
+    if 'Pressure_ac' in VEL:
+        VEL['bin_depth'] = VEL['Pressure_ac'] - VEL['bindist']
     else:
-        # VEL['bin_depth'] = np.tile(VEL['Pressure'], (M, 1)) - np.tile(VEL['bindist'], (N, 1)).T;
         VEL['bin_depth'] = VEL['Pressure'] - VEL['bindist']
 
     return VEL
@@ -198,14 +196,14 @@ def create_water_depth(VEL, metadata):
     """Create water_depth variable"""
 
     if 'initial_instrument_height' in metadata:
-        if 'press_ac' in VEL:
-            metadata['nominal_instrument_depth'] = np.nanmean(VEL['press_ac'])
+        if 'Pressure_ac' in VEL:
+            metadata['nominal_instrument_depth'] = np.nanmean(VEL['Pressure_ac'])
             VEL['Depth'] = metadata['nominal_instrument_depth']
             wdepth = metadata['nominal_instrument_depth'] + metadata['initial_instrument_height']
             metadata['WATER_DEPTH_source'] = 'water depth = MSL from pressure sensor, atmospherically corrected'
             metadata['WATER_DEPTH_datum'] = 'MSL'
-        elif 'press' in VEL:
-            metadata['nominal_instrument_depth'] = np.nanmean(VEL['press'])
+        elif 'Pressure' in VEL:
+            metadata['nominal_instrument_depth'] = np.nanmean(VEL['Pressure'])
             VEL['Depth'] = metadata['nominal_instrument_depth']
             wdepth = metadata['nominal_instrument_depth'] + metadata['initial_instrument_height']
             metadata['WATER_DEPTH_source'] = 'water depth = MSL from pressure sensor'
@@ -230,22 +228,26 @@ def trim_vel(VEL, metadata, waves=False):
     if 'Pressure_ac' in VEL:
         print('Using atmospherically corrected pressure to trim')
         WL = VEL['Pressure_ac'] + VEL.attrs['transducer_offset_from_bottom']
+        P = VEL['Pressure_ac']
     else:
         # FIXME incorporate press_ ac below
         print('Using NON-atmospherically corrected pressure to trim')
         WL = VEL['Pressure'] + VEL.attrs['transducer_offset_from_bottom']
+        P = VEL['Pressure']
 
 
     if 'trim_method' in metadata:
-        if metadata['trim_method'].lower() == 'water level' or metadata['trim_method'].lower() == 'water level sl':
+        if 'water level' in metadata['trim_method'].lower():
             if metadata['trim_method'].lower() == 'water level':
                 print('Trimming using water level')
                 for var in ['U', 'V', 'W', 'AGC']:
-                    VEL[var] = VEL[var].where(VEL['bindist'] < VEL['Pressure'])
+                    VEL[var] = VEL[var].where(VEL['bindist'] < P)
+                VEL.attrs['history'] = 'Trimmed velocity data using water level. '+ VEL.attrs['history']
             elif metadata['trim_method'].lower() == 'water level sl':
                 print('Trimming using water level and sidelobes')
                 for var in ['U', 'V', 'W', 'AGC']:
-                    VEL[var] = VEL[var].where(VEL['bindist'] < VEL['Pressure'] * np.cos(np.deg2rad(VEL.attrs['AQDBeamAngle'])))
+                    VEL[var] = VEL[var].where(VEL['bindist'] < P * np.cos(np.deg2rad(VEL.attrs['AQDBeamAngle'])))
+                VEL.attrs['history'] = 'Trimmed velocity data using water level and sidelobes. '+ VEL.attrs['history']
 
             # find first bin that is all bad values
             # there might be a better way to do this using xarray and named dimensions, but this works for now
