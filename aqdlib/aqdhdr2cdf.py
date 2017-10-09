@@ -6,7 +6,7 @@ import numpy as np
 import sys
 sys.path.insert(0, '/Users/dnowacki/Documents/aqdlib')
 import aqdlib
-import qaqc
+import aqdlib.qaqc
 import pandas as pd
 import xarray as xr
 import warnings
@@ -334,7 +334,8 @@ def compute_time(RAW, metadata, waves=False):
     if not waves:
         timeshift = metadata['instmeta']['AQDAverageInterval']/2
     else:
-        timeshift = metadata['instmeta']['WaveInterval']/2
+        fs = float(metadata['instmeta']['WaveSampleRate'].split()[0])
+        timeshift = metadata['instmeta']['WaveNumberOfSamples']/fs/2
 
     if timeshift.is_integer():
         RAW['time'] = RAW['time'] + np.timedelta64(int(timeshift), 's')

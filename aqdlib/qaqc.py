@@ -197,6 +197,7 @@ def create_water_depth(VEL, metadata):
 
     if 'initial_instrument_height' in metadata:
         if 'Pressure_ac' in VEL:
+            print(VEL['Pressure_ac'])
             metadata['nominal_instrument_depth'] = np.nanmean(VEL['Pressure_ac'])
             VEL['Depth'] = metadata['nominal_instrument_depth']
             wdepth = metadata['nominal_instrument_depth'] + metadata['initial_instrument_height']

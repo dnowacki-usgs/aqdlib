@@ -1,12 +1,10 @@
 #!/usr/bin/env python
 
 from __future__ import division, print_function
-import numpy as np
-import datetime as dt
-import pytz
 import sys
 sys.path.insert(0, '/Users/dnowacki/Documents/aqdlib')
 from aqdlib.aqdhdr2cdf import compute_time, read_aqd_hdr, check_orientation, check_metadata, write_metadata, update_attrs
+import numpy as np
 import pandas as pd
 import xarray as xr
 
@@ -23,8 +21,6 @@ def wad_to_cdf(metadata):
     RAW = load_whd(metadata)
 
     RAW = load_wad(RAW, metadata)
-
-    RAW = compute_time(RAW, metadata)
 
     # Deal with metadata peculiarities
     metadata = check_metadata(metadata, waves=True)
@@ -66,8 +62,12 @@ def load_whd(metadata):
     def parse(year, month, day, hour, minute, second):
         return year + '-' + month + '-' + day + ' ' + hour + ':' + minute + ':' + second
 
-    WHD = pd.read_csv(whdfile, header=None, delim_whitespace=True,
-        parse_dates={'datetime': [2, 0, 1, 3, 4, 5]}, date_parser=parse, usecols=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 18, 19, 20])
+    WHD = pd.read_csv(whdfile,
+        header=None,
+        delim_whitespace=True,
+        parse_dates={'datetime': [2, 0, 1, 3, 4, 5]},
+        date_parser=parse,
+        usecols=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 18, 19, 20])
 
     # rename columns from numeric to human-readable
     WHD.rename(columns={6: 'burst',

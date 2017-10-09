@@ -73,18 +73,30 @@ def cdf_to_nc(cdf_filename, metadata, atmpres=False):
 
 
 def load_cdf(cdf_filename, metadata, atmpres=False):
+    """
+    Load raw .cdf file and, optionally, an atmospheric pressure .cdf file
+    """
 
     ds = xr.open_dataset(cdf_filename, autoclose=True)
 
     if atmpres is not False:
-        p = xr.open_dataset(atmpres)
+        p = xr.open_dataset(atmpres, autoclose=True)
         # TODO: check to make sure this data looks OK
-        ds['Pressure_ac'] = xr.DataArray(ds['Pressure'] - (p['atmpres'] - p['atmpres'].offset))
+        # need to call load for waves; it's not in memory and throws error
+        print('Printing atmpres')
+        print(p)
+        print('Printing ds Pressure')
+        print(ds['Pressure'])
+        ds['Pressure_ac'] = xr.DataArray(ds['Pressure'].load() - (p['atmpres'] - p['atmpres'].offset))
 
     return ds
 
 
 def clip_ds(ds, metadata):
+    """
+    Clip an xarray Dataset from metadata, either via good_ens or
+    Deployment_date and Recovery_date
+    """
 
     print('first burst in full file:', ds['time'].min().values)
     print('last burst in full file:', ds['time'].max().values)
@@ -92,24 +104,28 @@ def clip_ds(ds, metadata):
     # clip either by ensemble indices or by the deployment and recovery date specified in metadata
     if 'good_ens' in metadata:
         # we have good ensemble indices in the metadata
-        print('Using good_ens')
+        print('Clipping data using good_ens')
 
         ds = ds.isel(time=slice(metadata['good_ens'][0], metadata['good_ens'][1]))
 
         ds.attrs['history'] = 'Data clipped using good_ens values of ' + metadata['good_ens'][0] + ', ' + metadata['good_ens'][1] + '. ' + ds.attrs['history']
 
-    else:
+    elif 'Deployment_date' in metadata and 'Recovery_date' in metadata:
         # we clip by the times in/out of water as specified in the metadata
-        print('Using Deployment_date and Recovery_date')
+        print('Clipping data using Deployment_date and Recovery_date')
 
         ds = ds.sel(time=slice(metadata['Deployment_date'], metadata['Recovery_date']))
 
         ds.attrs['history'] = 'Data clipped using Deployment_date and Recovery_date of ' + metadata['Deployment_date'] + ', ' + metadata['Recovery_date'] + '. ' + ds.attrs['history']
+    else:
+        # do nothing
+        print('Did not clip data; no values specified in metadata')
 
     print('first burst in trimmed file:', ds['time'].min().values)
     print('last burst in trimmed file:', ds['time'].max().values)
 
     return ds
+
 
 # TODO: add analog input variables (OBS, NTU, etc)
 
@@ -146,7 +162,7 @@ def ds_swap_dims(ds):
     return ds
 
 
-def da_reshape(ds, var):
+def da_reshape(ds, var, waves=False):
     """
     Add lon and lat dimensions to DataArrays and reshape to conform to our
     standard order
@@ -157,24 +173,21 @@ def da_reshape(ds, var):
     ds[var] = xr.concat([ds[var]], dim=ds['lat'])
 
     # Reshape using transpose depending on shape
-    if len(ds[var].shape) == 4:
-        ds[var] = ds[var].transpose('time', 'lon', 'lat', 'bindist')
-    elif len(ds[var].shape) == 3:
-        ds[var] = ds[var].transpose('time', 'lon', 'lat')
+    if waves == False:
+        if len(ds[var].shape) == 4:
+            ds[var] = ds[var].transpose('time', 'lon', 'lat', 'bindist')
+        elif len(ds[var].shape) == 3:
+            ds[var] = ds[var].transpose('time', 'lon', 'lat')
 
     return ds
 
 
-def ds_rename(ds):
+def ds_rename(ds, waves=False):
     """
     Rename DataArrays within Dataset for EPIC compliance
     """
 
-    varnames = {'U': 'u_1205',
-        'V': 'v_1206',
-        'W': 'w_1204',
-        'AGC': 'AGC_1202',
-        'Pressure': 'P_1',
+    varnames = {'Pressure': 'P_1',
         'Temperature': 'Tx_1211',
         'Heading': 'Hdg_1215',
         'Pitch': 'Ptch_1216',
@@ -182,6 +195,19 @@ def ds_rename(ds):
 
     if 'Pressure_ac' in ds:
         varnames['Pressure_ac'] = 'P_1ac'
+
+    if waves == False:
+        varnames.update({'U': 'u_1205',
+            'V': 'v_1206',
+            'W': 'w_1204',
+            'AGC': 'AGC_1202'})
+    elif waves == True:
+        varnames.update({'VEL1': 'vel1_1277',
+            'VEL2': 'vel2_1278',
+            'VEL3': 'vel3_1279',
+            'AMP1': 'AGC1_1221',
+            'AMP2': 'AGC2_1222',
+            'AMP3': 'AGC3_1223'})
 
     ds.rename(varnames, inplace=True)
 
@@ -211,9 +237,9 @@ def ds_drop(ds):
     return ds
 
 
-def ds_add_attrs(ds, metadata):
+def ds_add_attrs(ds, metadata, waves=False):
     """
-    add attrs
+    add EPIC and CMG attributes to xarray Dataset
     """
 
     def add_vel_attributes(vel, metadata):
@@ -258,20 +284,58 @@ def ds_add_attrs(ds, metadata):
         'nominal_instrument_depth': metadata['nominal_instrument_depth'],
         'epic_code': 3})
 
-    ds['u_1205'].attrs.update({'name': 'u',
-        'long_name': 'Eastward Velocity',
-        'generic_name': 'u',
-        'epic_code': 1205})
+    if waves == False:
+        ds['u_1205'].attrs.update({'name': 'u',
+            'long_name': 'Eastward Velocity',
+            'generic_name': 'u',
+            'epic_code': 1205})
 
-    ds['v_1206'].attrs.update({'name': 'v',
-        'long_name': 'Northward Velocity',
-        'generic_name': 'v',
-        'epic_code': 1206})
+        ds['v_1206'].attrs.update({'name': 'v',
+            'long_name': 'Northward Velocity',
+            'generic_name': 'v',
+            'epic_code': 1206})
 
-    ds['w_1204'].attrs.update({'name': 'w',
-        'long_name': 'Vertical Velocity',
-        'generic_name': 'w',
-        'epic_code': 1204})
+        ds['w_1204'].attrs.update({'name': 'w',
+            'long_name': 'Vertical Velocity',
+            'generic_name': 'w',
+            'epic_code': 1204})
+
+        ds['AGC_1202'].attrs.update({'units': 'counts',
+            'name': 'AGC',
+            'long_name': 'Average Echo Intensity',
+            'generic_name': 'AGC',
+            'epic_code': 1202})
+
+    elif waves == True:
+        ds['vel1_1277'].attrs.update({'units': 'mm/s',
+            'long_name': 'Beam 1 Velocity',
+            'generic_name': 'vel1',
+            'epic_code': 1277})
+
+        ds['vel2_1278'].attrs.update({'units': 'mm/s',
+            'long_name': 'Beam 2 Velocity',
+            'generic_name': 'vel2',
+            'epic_code': 1278})
+
+        ds['vel3_1279'].attrs.update({'units': 'mm/s',
+            'long_name': 'Beam 3 Velocity',
+            'generic_name': 'vel3',
+            'epic_code': 1279})
+
+        ds['AGC1_1221'].attrs.update({'units': 'counts',
+            'long_name': 'Echo Intensity (AGC) Beam 1',
+            'generic_name': 'AGC1',
+            'epic_code': 1221})
+
+        ds['AGC2_1222'].attrs.update({'units': 'counts',
+            'long_name': 'Echo Intensity (AGC) Beam 2',
+            'generic_name': 'AGC2',
+            'epic_code': 1222})
+
+        ds['AGC3_1223'].attrs.update({'units': 'counts',
+            'long_name': 'Echo Intensity (AGC) Beam 3',
+            'generic_name': 'AGC3',
+            'epic_code': 1223})
 
     ds['P_1'].attrs.update({'units': 'dbar',
         'name': 'P',
@@ -304,12 +368,6 @@ def ds_add_attrs(ds, metadata):
         'generic_name': 'temp',
         'epic_code': 1211})
 
-    ds['AGC_1202'].attrs.update({'units': 'counts',
-        'name': 'AGC',
-        'long_name': 'Average Echo Intensity',
-        'generic_name': 'AGC',
-        'epic_code': 1202})
-
     ds['Hdg_1215'].attrs.update({'units': 'degrees',
         'name': 'Hdg',
         'long_name': 'Instrument Heading',
@@ -326,6 +384,7 @@ def ds_add_attrs(ds, metadata):
         'long_name': 'Instrument Pitch',
         'generic_name': 'ptch',
         'epic_code': 1216})
+
     ds['Roll_1217'].attrs.update({'units': 'degrees',
         'name': 'Roll',
         'long_name': 'Instrument Roll',
@@ -337,11 +396,17 @@ def ds_add_attrs(ds, metadata):
         'blanking_distance': ds.attrs['AQDBlankingDistance'],
         'note': 'distance is along profile from instrument head to center of bin'})
 
-    for v in ['P_1', 'Tx_1211', 'AGC_1202', 'Hdg_1215', 'Ptch_1216', 'Roll_1217', 'u_1205', 'v_1206', 'w_1204', 'bin_depth', 'bindist']:
-        add_attributes(ds[v], metadata, ds.attrs)
+    if waves == False:
+        for v in ['AGC_1202', 'u_1205', 'v_1206', 'w_1204']:
+            add_attributes(ds[v], metadata, ds.attrs)
+        for v in ['u_1205', 'v_1206', 'w_1204']:
+            add_vel_attributes(ds[v], metadata)
+    elif waves == True:
+        for v in ['vel1_1277', 'vel2_1278', 'vel3_1279', 'AGC1_1221', 'AGC2_1222', 'AGC3_1223']:
+            add_attributes(ds[v], metadata, ds.attrs)
 
-    for v in ['u_1205', 'v_1206', 'w_1204']:
-        add_vel_attributes(ds[v], metadata)
+    for v in ['P_1', 'Tx_1211', 'Hdg_1215', 'Ptch_1216', 'Roll_1217', 'bin_depth', 'bindist']:
+        add_attributes(ds[v], metadata, ds.attrs)
 
     return ds
 
