@@ -9,6 +9,7 @@ import aqdlib
 import datetime as dt
 import xarray as xr
 
+
 def load_cdf(cdf_filename, varis, squeeze_me=False):
     """Load all variables in a cdf file to a dictionary"""
 
@@ -20,6 +21,7 @@ def load_cdf(cdf_filename, varis, squeeze_me=False):
                 RAW[var] = np.squeeze(RAW[var])
 
         return RAW
+
 
 def add_final_metadata(ds, waves=False):
 
@@ -40,17 +42,6 @@ def add_final_metadata(ds, waves=False):
 
     return ds
 
-def time_time2_to_datetime(time, time2):
-    """Create datetime array from time and time2 values"""
-
-    times = []
-
-    for t, t2 in zip(time, time2):
-        year, mon, day, frac = jdcal.jd2gcal(t - 0.5, t2/86400000)
-        hour, minute, second = day2hms(frac)
-        times.append(dt.datetime(year, mon, day, hour, minute, second, tzinfo=pytz.utc))
-
-    return np.array(times)
 
 def add_min_max(ds):
     """
@@ -67,15 +58,6 @@ def add_min_max(ds):
 
     return ds
 
-def plot_inwater(RAW, inwater_time, outwater_time):
-    plt.figure(figsize=(12,8))
-    plt.plot(RAW['datetime'], RAW['pressure'])
-    stind = np.where(RAW['datetime'] > pytz.utc.localize(parser.parse(inwater_time)))[0][0]
-    stend = np.where(RAW['datetime'] < pytz.utc.localize(parser.parse(outwater_time)))[0][-1]
-    for s in [stind, stend]:
-        plt.plot(RAW['datetime'][s], RAW['pressure'][s], 'r.')
-    plt.title(str(stind) + ' - ' + str(stend))
-    plt.show()
 
 def coord_transform(vel1, vel2, vel3, heading, pitch, roll, T, cs):
     """Perform coordinate transformation to ENU"""
@@ -126,6 +108,7 @@ def coord_transform(vel1, vel2, vel3, heading, pitch, roll, T, cs):
 
     return u, v, w
 
+
 def set_orientation(VEL, T, metadata):
     """
     Create depth variable depending on instrument orientation
@@ -155,6 +138,7 @@ def set_orientation(VEL, T, metadata):
 
     return VEL, T
 
+
 def make_bin_depth(VEL, metadata):
     """Create bin_depth variable"""
 
@@ -164,6 +148,7 @@ def make_bin_depth(VEL, metadata):
         VEL['bin_depth'] = VEL['Pressure'] - VEL['bindist']
 
     return VEL
+
 
 def magvar_correct(VEL, metadata):
     """Correct for magnetic declination at site"""
@@ -191,6 +176,7 @@ def magvar_correct(VEL, metadata):
     VEL['V'] = -vel1 * np.sin(magvar) + vel2 * np.cos(magvar)
 
     return VEL
+
 
 def create_water_depth(VEL, metadata):
     """Create water_depth variable"""
@@ -222,6 +208,7 @@ def create_water_depth(VEL, metadata):
         metadata['initial_instrument_height'] = 0 # TODO: do we really want to set to zero?
 
     return VEL, metadata
+
 
 def trim_vel(VEL, metadata, waves=False):
     """Trim velocity data depending on specified method"""
@@ -263,28 +250,44 @@ def trim_vel(VEL, metadata, waves=False):
 
     return VEL
 
-def day2hms(d):
-    """Convert fractional day value into hour, minute, second"""
 
-    frachours = d * 24
-    h = np.int(np.floor(frachours))
-    fracmins = (frachours - h) * 60
-    m = np.int(np.floor(fracmins))
-    fracsecs = (fracmins - m) * 60
-    s = np.int(fracsecs)
-
-    return h, m, s
-
-def hms2h(h,m,s):
-    """Convert hour, minute, second to fractional hour"""
-
-    return h + m/60 + s/60/60
-
-def julian(t):
-    """Compute Julian date, relying heavily on jdcal package"""
-
-    y = t.year
-    m = t.month
-    d = t.day
-    h = hms2h(t.hour, t.minute, t.second)
-    return sum(jdcal.gcal2jd(y,m,d)) + h/24 + 0.5
+# def time_time2_to_datetime(time, time2):
+#     """Create datetime array from time and time2 values"""
+#
+#     times = []
+#
+#     for t, t2 in zip(time, time2):
+#         year, mon, day, frac = jdcal.jd2gcal(t - 0.5, t2/86400000)
+#         hour, minute, second = day2hms(frac)
+#         times.append(dt.datetime(year, mon, day, hour, minute, second, tzinfo=pytz.utc))
+#
+#     return np.array(times)
+# 
+#
+# def day2hms(d):
+#     """Convert fractional day value into hour, minute, second"""
+#
+#     frachours = d * 24
+#     h = np.int(np.floor(frachours))
+#     fracmins = (frachours - h) * 60
+#     m = np.int(np.floor(fracmins))
+#     fracsecs = (fracmins - m) * 60
+#     s = np.int(fracsecs)
+#
+#     return h, m, s
+#
+#
+# def hms2h(h,m,s):
+#     """Convert hour, minute, second to fractional hour"""
+#
+#     return h + m/60 + s/60/60
+#
+#
+# def julian(t):
+#     """Compute Julian date, relying heavily on jdcal package"""
+#
+#     y = t.year
+#     m = t.month
+#     d = t.day
+#     h = hms2h(t.hour, t.minute, t.second)
+#     return sum(jdcal.gcal2jd(y,m,d)) + h/24 + 0.5
