@@ -25,6 +25,7 @@ def load_cdf(cdf_filename, varis, squeeze_me=False):
 
 def add_final_metadata(ds, waves=False):
 
+    # FIXME: might not need these history lines any more
     if not waves:
         ds.attrs['history'] = 'Processed to EPIC using aqdcdf2nc.py. ' + ds.attrs['history']
 
@@ -183,7 +184,6 @@ def create_water_depth(VEL, metadata):
 
     if 'initial_instrument_height' in metadata:
         if 'Pressure_ac' in VEL:
-            print(VEL['Pressure_ac'])
             metadata['nominal_instrument_depth'] = np.nanmean(VEL['Pressure_ac'])
             VEL['Depth'] = metadata['nominal_instrument_depth']
             wdepth = metadata['nominal_instrument_depth'] + metadata['initial_instrument_height']
@@ -262,7 +262,7 @@ def trim_vel(VEL, metadata, waves=False):
 #         times.append(dt.datetime(year, mon, day, hour, minute, second, tzinfo=pytz.utc))
 #
 #     return np.array(times)
-# 
+#
 #
 # def day2hms(d):
 #     """Convert fractional day value into hour, minute, second"""

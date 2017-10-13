@@ -4,7 +4,7 @@ from __future__ import division, print_function
 import xarray as xr
 import sys
 sys.path.insert(0, '/Users/dnowacki/Documents/aqdlib')
-import qaqc
+import aqdlib.qaqc as qaqc
 import netCDF4
 
 
@@ -83,10 +83,6 @@ def load_cdf(cdf_filename, metadata, atmpres=False):
         p = xr.open_dataset(atmpres, autoclose=True)
         # TODO: check to make sure this data looks OK
         # need to call load for waves; it's not in memory and throws error
-        print('Printing atmpres')
-        print(p)
-        print('Printing ds Pressure')
-        print(ds['Pressure'])
         ds['Pressure_ac'] = xr.DataArray(ds['Pressure'].load() - (p['atmpres'] - p['atmpres'].offset))
 
     return ds
@@ -108,7 +104,11 @@ def clip_ds(ds, metadata):
 
         ds = ds.isel(time=slice(metadata['good_ens'][0], metadata['good_ens'][1]))
 
-        ds.attrs['history'] = 'Data clipped using good_ens values of ' + metadata['good_ens'][0] + ', ' + metadata['good_ens'][1] + '. ' + ds.attrs['history']
+        histtext = 'Data clipped using good_ens values of ' + metadata['good_ens'][0] + ', ' + metadata['good_ens'][1] + '. '
+        if 'history' in ds.attrs:
+            ds.attrs['history'] = histtext + ds.attrs['history']
+        else:
+            ds.attrs['history'] = histtext
 
     elif 'Deployment_date' in metadata and 'Recovery_date' in metadata:
         # we clip by the times in/out of water as specified in the metadata
@@ -116,7 +116,11 @@ def clip_ds(ds, metadata):
 
         ds = ds.sel(time=slice(metadata['Deployment_date'], metadata['Recovery_date']))
 
-        ds.attrs['history'] = 'Data clipped using Deployment_date and Recovery_date of ' + metadata['Deployment_date'] + ', ' + metadata['Recovery_date'] + '. ' + ds.attrs['history']
+        histtext = 'Data clipped using Deployment_date and Recovery_date of ' + metadata['Deployment_date'] + ', ' + metadata['Recovery_date'] + '. '
+        if 'history' in ds.attrs:
+            ds.attrs['history'] = histtext + ds.attrs['history']
+        else:
+            ds.attrs['history'] = histtext
     else:
         # do nothing
         print('Did not clip data; no values specified in metadata')

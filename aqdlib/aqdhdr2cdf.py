@@ -2,7 +2,6 @@
 
 from __future__ import division, print_function
 import numpy as np
-# from aqdlib import aqdlib.DOUBLE_FILL
 import sys
 sys.path.insert(0, '/Users/dnowacki/Documents/aqdlib')
 import aqdlib
@@ -12,6 +11,8 @@ import xarray as xr
 import warnings
 import platform
 import netCDF4
+import inspect
+import os
 
 
 def prf_to_cdf(metadata):
@@ -190,11 +191,11 @@ def update_attrs(cdf_filename, RAW, metadata, waves=False):
     RAW['time'].attrs.update({'standard_name': 'time',
         'axis': 'T'})
 
-    RAW['lat'].attrs.update({'units': 'degrees_north',
+    RAW['lat'].attrs.update({'units': 'degree_north',
         'long_name': 'Latitude',
         'epic_code': 500})
 
-    RAW['lon'].attrs.update({'units': 'degrees_east',
+    RAW['lon'].attrs.update({'units': 'degree_east',
         'long_name': 'Longitude',
         'epic_code': 502})
 
@@ -322,13 +323,17 @@ def write_metadata(ds, metadata):
         if k != 'instmeta': # don't want to write out instmeta dict, call it separately
             ds.attrs.update({k: metadata[k]})
 
-    ds.attrs.update({'history': 'Processed using aqdhdr2cdf.py with Python ' + platform.python_version() + ', xarray ' + xr.__version__ + ', NumPy ' + np.__version__ + ', netCDF4 ' + netCDF4.__version__})
+    f = os.path.basename(inspect.stack()[1][1])
+
+    ds.attrs.update({'history': 'Processed using ' + f + ' with Python ' +
+        platform.python_version() + ', xarray ' + xr.__version__ + ', NumPy ' +
+        np.__version__ + ', netCDF4 ' + netCDF4.__version__})
 
     return ds
 
 
 def compute_time(RAW, metadata, waves=False):
-    """Compute Julian date and then time and time2 for use in NetCDF file"""
+    """Compute Julian date and then time and time2 for use in netCDF file"""
 
     # shift times to center of ensemble
     if not waves:

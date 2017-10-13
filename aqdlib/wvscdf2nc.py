@@ -3,6 +3,7 @@
 from __future__ import division, print_function
 import sys
 sys.path.insert(0, '/Users/dnowacki/Documents/aqdlib')
+import aqdlib
 from aqdhdr2cdf import compute_time, read_aqd_hdr, check_metadata, check_orientation
 import aqdcdf2nc
 import qaqc
@@ -30,9 +31,12 @@ def cdf_to_nc(cdf_filename, metadata, atmpres=False):
     # TODO: Need to add all global attributes from CDF to NC file (or similar)
     VEL = qaqc.add_min_max(VEL)
 
-    nc_filename = metadata['filename'] + '-wvsb-cal.nc' # TODO: why is a "b" in there?
+    nc_filename = metadata['filename'] + 'wvsb-cal.nc' # TODO: why is a "b" in there?
     VEL.to_netcdf(nc_filename, unlimited_dims='time')
     print('Done writing netCDF file', nc_filename)
+
+    # rename time variables after the fact to conform with EPIC/CMG standards
+    aqdlib.aqdcdf2nc.rename_time(nc_filename)
 
     return VEL
 
